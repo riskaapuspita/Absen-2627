@@ -11,7 +11,7 @@ export function exportRecapToExcel(
   filterInfo: { kelas?: string; periodLabel?: string }
 ): void {
   // Title & Metadata Rows
-  const schoolName = settings.teacherProfile?.schoolName || 'SMA Negeri 1 Nusantara';
+  const schoolName = settings.teacherProfile?.schoolName || 'SMAN 1 LEUWILIANG by Riska Puspita';
   const academicYear = settings.academicYear || '2025/2026';
   const semester = settings.semester || 'Ganjil';
   const kelas = filterInfo.kelas || 'Semua Kelas';

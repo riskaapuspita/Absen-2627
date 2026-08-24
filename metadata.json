@@ -1,6 +1,6 @@
 {
   "name": "Sistem Absensi & Rekapitulasi Siswa SMA",
-  "description": "Aplikasi rekapitulasi absensi siswa SMA modern untuk Guru BK dengan pemantauan kehadiran harian, statistik, sistem peringatan alfa, dan ekspor data.",
+  "description": "Aplikasi rekapitulasi absensi siswa SMAN 1 Leuwiliang untuk Guru BK dengan pemantauan kehadiran harian, statistik, sistem peringatan alfa, dan ekspor data by Riska Puspita.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

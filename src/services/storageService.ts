@@ -55,6 +55,19 @@ export function initStorage(): void {
   }
   if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(defaultSettings));
+  } else {
+    try {
+      const existing = JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS) || '{}');
+      if (!existing?.teacherProfile?.schoolName || existing?.teacherProfile?.schoolName === 'SMA Negeri 1 Nusantara') {
+        existing.teacherProfile = {
+          ...existing.teacherProfile,
+          ...defaultSettings.teacherProfile,
+        };
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(existing));
+      }
+    } catch {
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(defaultSettings));
+    }
   }
   if (!localStorage.getItem(STORAGE_KEYS.BK_NOTES)) {
     localStorage.setItem(STORAGE_KEYS.BK_NOTES, JSON.stringify(initialBKNotes));
@@ -230,7 +243,16 @@ export function getAttendanceByDateAndClass(date: string, kelas: string): {
 export function getSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    return raw ? JSON.parse(raw) : defaultSettings;
+    if (!raw) return defaultSettings;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.teacherProfile?.schoolName || parsed?.teacherProfile?.schoolName === 'SMA Negeri 1 Nusantara') {
+      parsed.teacherProfile = {
+        ...parsed.teacherProfile,
+        ...defaultSettings.teacherProfile,
+      };
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(parsed));
+    }
+    return parsed;
   } catch (e) {
     console.error('Failed to get settings', e);
     return defaultSettings;

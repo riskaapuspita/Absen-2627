@@ -97,11 +97,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
               <GraduationCap className="w-6 h-6" />
             </div>
-            <div>
-              <h2 className="font-extrabold text-base tracking-tight text-white flex items-center gap-1.5">
-                SIA-BK SMA
+            <div className="overflow-hidden">
+              <h2 className="font-extrabold text-sm tracking-tight text-white flex items-center gap-1.5 truncate">
+                SMAN 1 LEUWILIANG
               </h2>
-              <p className="text-[11px] text-emerald-400 font-medium">Presensi & Bimbingan</p>
+              <p className="text-[10px] text-emerald-400 font-semibold truncate">by Riska Puspita &bull; BK</p>
             </div>
           </div>
           <button

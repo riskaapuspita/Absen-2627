@@ -22,8 +22,8 @@ export const defaultSettings: AppSettings = {
   teacherProfile: {
     name: 'Riska Puspita, S.Pd., Kons.',
     nip: '19880412 201403 2 004',
-    schoolName: 'SMA Negeri 1 Nusantara',
-    schoolAddress: 'Jl. Pendidikan No. 45, Kebayoran Baru, Jakarta Selatan',
+    schoolName: 'SMAN 1 LEUWILIANG by Riska Puspita',
+    schoolAddress: 'Jl. Raya Leuwiliang No. 106, Leuwiliang, Kab. Bogor, Jawa Barat',
     headmasterName: 'Drs. H. Bambang Sujatmiko, M.Pd.',
     headmasterNip: '19680715 199303 1 002',
     email: 'riskapuspita32@guru.sma.belajar.id',
