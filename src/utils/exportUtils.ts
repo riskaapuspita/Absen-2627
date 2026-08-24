@@ -424,6 +424,105 @@ export function downloadStudentCSVTemplate(): void {
 }
 
 // ==========================================
+// 5B. DOWNLOAD EXCEL TEMPLATE FOR SINGLE CLASS ATTENDANCE (MAX 50 STUDENTS)
+// ==========================================
+export function downloadClassAttendanceExcelTemplate(targetClass: string = 'X-1'): void {
+  const titleHeader = [
+    [`DAFTAR NAMA ABSENSI SISWA KELAS ${targetClass.toUpperCase()}`],
+    [`SMAN 1 LEUWILIANG by Riska Puspita`],
+    [`Kapasitas Format: Maksimal 50 Siswa per Kelas`],
+    [],
+  ];
+
+  const headers = [
+    'No',
+    'Nama Siswa (Wajib)',
+    'NISN (10 Digit)',
+    'NIS',
+    'Jenis Kelamin (L/P)',
+    'Kelas',
+    'No HP Orang Tua / WhatsApp',
+    'Nama Orang Tua',
+  ];
+
+  const sampleNames = [
+    { nama: 'Aditia Pratama', jk: 'L', hp: '081234567801', ortu: 'Bambang Pratama' },
+    { nama: 'Aisyah Putri Azzahra', jk: 'P', hp: '081234567802', ortu: 'Hendra Wijaya' },
+    { nama: 'Alif Kurniawan', jk: 'L', hp: '081234567803', ortu: 'Kurnia Santoso' },
+    { nama: 'Anisa Rahmawati', jk: 'P', hp: '081234567804', ortu: 'Rahmat Hidayat' },
+    { nama: 'Bagas Sanjaya', jk: 'L', hp: '081234567805', ortu: 'Sanjaya Putra' },
+    { nama: 'Cantika Dewi Lestari', jk: 'P', hp: '081234567806', ortu: 'Dewi Sartika' },
+    { nama: 'Daffa Rizky Ramadhan', jk: 'L', hp: '081234567807', ortu: 'Ramadhan Syah' },
+    { nama: 'Dinda Permata Sari', jk: 'P', hp: '081234567808', ortu: 'Permana Sidik' },
+    { nama: 'Fajar Nugraha', jk: 'L', hp: '081234567809', ortu: 'Nugraha Budi' },
+    { nama: 'Farhan Maulana', jk: 'L', hp: '081234567810', ortu: 'Maulana Malik' },
+    { nama: 'Ghaida Nurul Izzah', jk: 'P', hp: '081234567811', ortu: 'Nurul Huda' },
+    { nama: 'Gilang Ramadhan', jk: 'L', hp: '081234567812', ortu: 'Suharja' },
+    { nama: 'Hana Khairunnisa', jk: 'P', hp: '081234567813', ortu: 'Khairul Anwar' },
+    { nama: 'Irfan Hakim', jk: 'L', hp: '081234567814', ortu: 'Hakim Lukman' },
+    { nama: 'Kaysha Nabila', jk: 'P', hp: '081234567815', ortu: 'Nabil Mansur' },
+    { nama: 'Lutfi Fadilah', jk: 'L', hp: '081234567816', ortu: 'Fadilah Hasan' },
+    { nama: 'Muhammad Fadhil', jk: 'L', hp: '081234567817', ortu: 'Fauzan Hakim' },
+    { nama: 'Nadine Azzahra', jk: 'P', hp: '081234567818', ortu: 'Agus Hendra' },
+    { nama: 'Rafi Ahmad Fauzi', jk: 'L', hp: '081234567819', ortu: 'Ahmad Fauzi' },
+    { nama: 'Zahra Amelia', jk: 'P', hp: '081234567820', ortu: 'Amiruddin' },
+  ];
+
+  const rows: any[][] = [];
+  sampleNames.forEach((s, idx) => {
+    const num = idx + 1;
+    const nisn = `008${String(1234500 + num).padStart(7, '0')}`;
+    const nis = `2526${String(100 + num)}`;
+    rows.push([
+      num,
+      s.nama,
+      nisn,
+      nis,
+      s.jk,
+      targetClass,
+      s.hp,
+      s.ortu,
+    ]);
+  });
+
+  const fullData = [...titleHeader, headers, ...rows];
+
+  const instructions = [
+    ['PANDUAN PENGISIAN DAFTAR NAMA ABSENSI KELAS (MAKSIMAL 50 SISWA)'],
+    [],
+    ['1. File ini digunakan khusus untuk mengimpor data absensi siswa pada 1 rombongan belajar (kelas).'],
+    ['2. Batas maksimal siswa per kelas yang diimpor adalah 50 siswa.'],
+    ['3. Kolom "Nama Siswa" adalah kolom WAJIB diisi.'],
+    ['4. Kolom NISN opsional (jika kosong, sistem akan menghasilkan NISN unik otomatis).'],
+    ['5. Kolom Jenis Kelamin diisi "L" (Laki-laki) atau "P" (Perempuan).'],
+    ['6. Kolom Kelas dapat disesuaikan (misal: X-1, X-2, XI-IPA-1, dll).'],
+    ['7. Simpan file sebagai Excel (.xlsx/.xls) atau CSV, kemudian unggah pada aplikasi SMAN 1 Leuwiliang.'],
+  ];
+
+  const wb = XLSX.utils.book_new();
+
+  const wsData = XLSX.utils.aoa_to_sheet(fullData);
+  wsData['!cols'] = [
+    { wch: 6 },
+    { wch: 32 },
+    { wch: 16 },
+    { wch: 12 },
+    { wch: 18 },
+    { wch: 12 },
+    { wch: 25 },
+    { wch: 25 },
+  ];
+
+  const wsGuide = XLSX.utils.aoa_to_sheet(instructions);
+  wsGuide['!cols'] = [{ wch: 70 }];
+
+  XLSX.utils.book_append_sheet(wb, wsData, `Absen_${targetClass}`);
+  XLSX.utils.book_append_sheet(wb, wsGuide, 'Panduan Import');
+
+  XLSX.writeFile(wb, `Template_Absen_${targetClass.replace(/\s+/g, '_')}_Maks50.xlsx`);
+}
+
+// ==========================================
 // 6. PARSE FILE (XLSX, XLS, OR CSV) INTO STUDENTS
 // ==========================================
 export async function parseStudentsFromFile(
@@ -574,6 +673,180 @@ export function parseStudentsCSV(csvText: string): Array<Omit<Student, 'id' | 'c
   }
 
   return results;
+}
+
+// ==========================================
+// 6B. SPECIALIZED CLASS EXCEL PARSER (MAX 50 STUDENTS PER CLASS)
+// ==========================================
+export interface ClassExcelParseResult {
+  students: Array<Omit<Student, 'id' | 'created_at'>>;
+  totalFound: number;
+  isExceededLimit: boolean;
+  maxLimit: number;
+  detectedClassName?: string;
+}
+
+export async function parseClassAttendanceExcel(
+  file: File,
+  targetClass: string
+): Promise<ClassExcelParseResult> {
+  const isCSV = file.name.endsWith('.csv');
+  let rawRows: any[][] = [];
+
+  if (isCSV) {
+    const text = await file.text();
+    const lines = text.split(/\r\n|\n/).filter((l) => l.trim().length > 0);
+    rawRows = lines.map((l) => {
+      const regex = /(?:,|\n|^)("(?:(?:"")*[^"]*)*"|[^",\n]*|(?:\n|$))/g;
+      const matches: string[] = [];
+      let m;
+      while ((m = regex.exec(l)) !== null) {
+        if (m.index === regex.lastIndex) regex.lastIndex++;
+        let val = m[1] || '';
+        if (val.startsWith('"') && val.endsWith('"')) {
+          val = val.substring(1, val.length - 1).replace(/""/g, '"');
+        }
+        matches.push(val.trim());
+      }
+      return matches;
+    });
+  } else {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: 'array' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+  }
+
+  if (rawRows.length === 0) {
+    return {
+      students: [],
+      totalFound: 0,
+      isExceededLimit: false,
+      maxLimit: 50,
+    };
+  }
+
+  // Detect header row or look for rows where name exists
+  let headerRowIndex = -1;
+  let nameColIdx = 1;
+  let nisnColIdx = -1;
+  let nisColIdx = -1;
+  let jkColIdx = -1;
+  let hpColIdx = -1;
+  let ortuColIdx = -1;
+  let detectedClass = targetClass;
+
+  // Search first 8 rows for headers
+  for (let i = 0; i < Math.min(rawRows.length, 8); i++) {
+    const row = rawRows[i] || [];
+    const joined = row.map((c) => String(c || '').toLowerCase()).join(' ');
+
+    // Check if header row
+    if (joined.includes('nama') || joined.includes('siswa') || joined.includes('student')) {
+      headerRowIndex = i;
+      row.forEach((cell, idx) => {
+        const text = String(cell || '').toLowerCase().trim();
+        if (text.includes('nama')) nameColIdx = idx;
+        else if (text.includes('nisn')) nisnColIdx = idx;
+        else if (text.includes('nis') && !text.includes('nisn')) nisColIdx = idx;
+        else if (text.includes('jk') || text.includes('kelamin') || text.includes('l/p') || text.includes('gender')) jkColIdx = idx;
+        else if (text.includes('hp') || text.includes('wa') || text.includes('telepon') || text.includes('kontak')) hpColIdx = idx;
+        else if (text.includes('ortu') || text.includes('wali') || text.includes('ayah') || text.includes('ibu')) ortuColIdx = idx;
+        else if (text.includes('kelas') || text.includes('rombel')) {
+          // If header has a class value in subsequent data
+        }
+      });
+      break;
+    }
+  }
+
+  const parsedStudents: Array<Omit<Student, 'id' | 'created_at'>> = [];
+  const startIdx = headerRowIndex >= 0 ? headerRowIndex + 1 : 0;
+
+  for (let i = startIdx; i < rawRows.length; i++) {
+    const row = rawRows[i];
+    if (!row || row.length === 0) continue;
+
+    // Check if this row is a metadata / note line
+    const firstCell = String(row[0] || '').trim();
+    if (firstCell.toLowerCase().startsWith('panduan') || firstCell.toLowerCase().startsWith('catatan') || firstCell.toLowerCase().startsWith('kapasitas') || firstCell.toLowerCase().startsWith('guru bk') || firstCell.toLowerCase().startsWith('daftar nama')) {
+      continue;
+    }
+
+    let rawName = '';
+    let rawNisn = '';
+    let rawNis = '';
+    let rawJk = '';
+    let rawHp = '';
+    let rawOrtu = '';
+
+    if (nameColIdx >= 0 && row[nameColIdx]) {
+      rawName = String(row[nameColIdx]).trim();
+    } else {
+      // Fallback: check columns for name-like string
+      for (let c = 0; c < Math.min(row.length, 4); c++) {
+        const val = String(row[c] || '').trim();
+        if (val && isNaN(Number(val)) && val.length > 2 && !val.toLowerCase().startsWith('panduan') && !val.toLowerCase().startsWith('no')) {
+          rawName = val;
+          break;
+        }
+      }
+    }
+
+    // Clean up name if it has leading number like "1. Budi Santoso"
+    rawName = rawName.replace(/^\d+[\.\)\-\s]+/, '').trim();
+
+    // Skip empty or invalid name rows
+    if (!rawName || rawName.length < 2 || rawName.toLowerCase() === 'nama siswa' || rawName.toLowerCase() === 'nama') {
+      continue;
+    }
+
+    if (nisnColIdx >= 0 && row[nisnColIdx]) {
+      rawNisn = String(row[nisnColIdx]).trim();
+    }
+    if (nisColIdx >= 0 && row[nisColIdx]) {
+      rawNis = String(row[nisColIdx]).trim();
+    }
+    if (jkColIdx >= 0 && row[jkColIdx]) {
+      rawJk = String(row[jkColIdx]).trim();
+    }
+    if (hpColIdx >= 0 && row[hpColIdx]) {
+      rawHp = String(row[hpColIdx]).trim();
+    }
+    if (ortuColIdx >= 0 && row[ortuColIdx]) {
+      rawOrtu = String(row[ortuColIdx]).trim();
+    }
+
+    // Generate valid NISN if empty
+    const cleanNisn = rawNisn && rawNisn.length >= 4 ? rawNisn : `008${Math.floor(1000000 + Math.random() * 9000000)}`;
+    const cleanJk = (rawJk || 'L').toUpperCase().startsWith('P') || rawJk.toUpperCase() === 'WANITA' || rawJk.toUpperCase() === 'PEREMPUAN' ? 'P' : 'L';
+
+    parsedStudents.push({
+      nisn: cleanNisn,
+      nis: rawNis || '',
+      nama: rawName,
+      kelas: targetClass,
+      jenis_kelamin: cleanJk,
+      status: 'Aktif',
+      nama_ortu: rawOrtu || '',
+      no_hp_ortu: rawHp || '',
+      alamat: '',
+    });
+  }
+
+  const totalFound = parsedStudents.length;
+  const isExceededLimit = totalFound > 50;
+  // Apply hard limit of 50 students per class import
+  const limitedStudents = parsedStudents.slice(0, 50);
+
+  return {
+    students: limitedStudents,
+    totalFound,
+    isExceededLimit,
+    maxLimit: 50,
+    detectedClassName: detectedClass,
+  };
 }
 
 // ==========================================

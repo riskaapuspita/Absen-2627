@@ -27,6 +27,7 @@ import {
   exportStudentsToCSV,
   downloadStudentExcelTemplate,
   downloadStudentCSVTemplate,
+  downloadClassAttendanceExcelTemplate,
   parseStudentsFromFile,
 } from '../../utils/exportUtils';
 import { triggerColorfulConfetti } from '../../utils/confetti';
@@ -680,24 +681,33 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               {/* Template Download Choices */}
               <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div>
-                  <p className="font-bold text-slate-800">Unduh Format Template Siswa:</p>
+                  <p className="font-bold text-slate-800">Unduh Format Template:</p>
                   <p className="text-slate-500 text-[11px]">
-                    Berisi contoh data & petunjuk pengisian
+                    Format Excel resmi untuk impor massal atau 1 kelas (maks. 50 siswa)
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => downloadClassAttendanceExcelTemplate(selectedClass !== 'Semua' ? selectedClass : 'X-1')}
+                    className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-lg shadow-xs flex items-center gap-1.5 transition-colors text-xs"
+                    title="Format khusus per rombel kelas (maksimal 50 siswa)"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>Template 1 Kelas (Maks 50)</span>
+                  </button>
                   <button
                     type="button"
                     onClick={downloadStudentExcelTemplate}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-xs flex items-center gap-1.5 transition-colors"
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-xs flex items-center gap-1.5 transition-colors text-xs"
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5" />
-                    <span>Template Excel (.xlsx)</span>
+                    <span>Template Master (.xlsx)</span>
                   </button>
                   <button
                     type="button"
                     onClick={downloadStudentCSVTemplate}
-                    className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-lg transition-colors flex items-center gap-1"
+                    className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-lg transition-colors flex items-center gap-1 text-xs"
                   >
                     <span>CSV</span>
                   </button>

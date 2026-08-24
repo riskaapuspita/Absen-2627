@@ -14,12 +14,16 @@ import {
   FileSpreadsheet,
   Sparkles,
   HelpCircle,
+  UserPlus,
+  Upload,
 } from 'lucide-react';
 import { Student, AttendanceRecord, AppSettings, AttendanceStatus } from '../../types';
 import { saveDailyAttendance, getAttendanceByDateAndClass } from '../../services/storageService';
 import { formatIndonesianDate, getTodayString } from '../../utils/dateUtils';
 import { exportDailyAttendanceToExcel } from '../../utils/exportUtils';
 import { triggerColorfulConfetti } from '../../utils/confetti';
+import { ImportClassExcelModal } from '../common/ImportClassExcelModal';
+import { ManualAddStudentModal } from '../common/ManualAddStudentModal';
 
 interface DailyAttendanceViewProps {
   students: Student[];
@@ -50,6 +54,10 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
   const [attendanceRows, setAttendanceRows] = useState<StudentAttendanceRow[]>([]);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [hasExistingData, setHasExistingData] = useState<boolean>(false);
+
+  // Modals for Import & Manual Add
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [isManualAddModalOpen, setIsManualAddModalOpen] = useState<boolean>(false);
 
   // Load students for chosen date and class
   const loadClassStudents = () => {
@@ -237,10 +245,10 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
             </div>
           </div>
 
-          {/* Date & Class pickers */}
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Date & Class pickers and Main Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2.5">
             {/* Tanggal */}
-            <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
               <label htmlFor="daily-date-input" className="text-xs font-semibold text-slate-600">
                 Tanggal:
               </label>
@@ -254,7 +262,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
             </div>
 
             {/* Kelas */}
-            <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
               <label htmlFor="daily-class-select" className="text-xs font-semibold text-slate-600">
                 Kelas:
               </label>
@@ -272,11 +280,33 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
               </select>
             </div>
 
+            {/* Impor Excel Absen 1 Kelas (Maks. 50 Siswa) */}
+            <button
+              id="import-daily-class-excel-btn"
+              onClick={() => setIsImportModalOpen(true)}
+              className="px-3 py-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 shadow-2xs active:scale-95"
+              title="Impor data absen siswa untuk kelas ini dari file Excel (Maksimal 50 siswa)"
+            >
+              <Upload className="w-4 h-4 text-emerald-600" />
+              <span>Impor Excel Absen (Maks. 50)</span>
+            </button>
+
+            {/* Tambah Manual Nama Siswa */}
+            <button
+              id="add-manual-daily-student-btn"
+              onClick={() => setIsManualAddModalOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95"
+              title="Tambah nama siswa secara manual ke kelas ini"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>+ Tambah Manual Siswa</span>
+            </button>
+
             {/* Ekspor Excel Hari Ini */}
             <button
               id="export-daily-excel-btn"
               onClick={handleExportTodayExcel}
-              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors flex items-center gap-1.5"
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors flex items-center gap-1.5"
               title="Unduh format spreadsheet harian"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
@@ -541,8 +571,38 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-10 text-center text-slate-400">
-                    Tidak ada siswa ditemukan di kelas ini atau dengan kata kunci pencarian.
+                  <td colSpan={6} className="py-12 text-center text-slate-500">
+                    <div className="max-w-md mx-auto space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-100">
+                        <Users className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-800 text-sm">
+                          Belum Ada Siswa di Kelas {selectedClass}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Silakan tambahkan nama siswa secara manual atau impor dari berkas Excel daftar absen (maksimal 50 siswa per kelas).
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsManualAddModalOpen(true)}
+                          className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-xs text-xs flex items-center gap-1.5 active:scale-95"
+                        >
+                          <UserPlus className="w-4 h-4" />
+                          <span>+ Tambah Manual Nama Siswa</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsImportModalOpen(true)}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs text-xs flex items-center gap-1.5 active:scale-95"
+                        >
+                          <Upload className="w-4 h-4" />
+                          <span>Impor Excel Absen (Maks. 50)</span>
+                        </button>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -576,6 +636,26 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Modal Import Excel 1 Kelas (Maks. 50 Siswa) */}
+      <ImportClassExcelModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        defaultClass={selectedClass}
+        settings={settings}
+        showToast={showToast}
+        onImportSuccess={() => loadClassStudents()}
+      />
+
+      {/* Modal Tambah Manual Nama Siswa */}
+      <ManualAddStudentModal
+        isOpen={isManualAddModalOpen}
+        onClose={() => setIsManualAddModalOpen(false)}
+        defaultClass={selectedClass}
+        settings={settings}
+        showToast={showToast}
+        onStudentAdded={() => loadClassStudents()}
+      />
     </div>
   );
 };
