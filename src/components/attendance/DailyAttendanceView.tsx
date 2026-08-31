@@ -16,6 +16,8 @@ import {
   HelpCircle,
   UserPlus,
   Upload,
+  BarChart3,
+  Share2,
 } from 'lucide-react';
 import { Student, AttendanceRecord, AppSettings, AttendanceStatus } from '../../types';
 import { saveDailyAttendance, getAttendanceByDateAndClass } from '../../services/storageService';
@@ -24,6 +26,7 @@ import { exportDailyAttendanceToExcel } from '../../utils/exportUtils';
 import { triggerColorfulConfetti } from '../../utils/confetti';
 import { ImportClassExcelModal } from '../common/ImportClassExcelModal';
 import { ManualAddStudentModal } from '../common/ManualAddStudentModal';
+import { DailyRecapModal } from './DailyRecapModal';
 
 interface DailyAttendanceViewProps {
   students: Student[];
@@ -58,6 +61,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
   // Modals for Import & Manual Add
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
   const [isManualAddModalOpen, setIsManualAddModalOpen] = useState<boolean>(false);
+  const [isDailyRecapModalOpen, setIsDailyRecapModalOpen] = useState<boolean>(false);
 
   // Load students for chosen date and class
   const loadClassStudents = () => {
@@ -179,12 +183,16 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
       const result = saveDailyAttendance(selectedDate, recordsToSave);
 
       setIsSaving(false);
+      setHasExistingData(true);
       triggerColorfulConfetti();
       showToast(
         'success',
         'Presensi Berhasil Disimpan',
         `Data presensi Kelas ${selectedClass} (${result.created} baru, ${result.updated} diperbarui) tanggal ${formatIndonesianDate(selectedDate, true)} berhasil tersimpan.`
       );
+
+      // Open automatic daily recap modal right after save!
+      setIsDailyRecapModalOpen(true);
     } catch (e) {
       setIsSaving(false);
       showToast('error', 'Gagal Menyimpan', 'Terjadi kesalahan saat menyimpan data absensi.');
@@ -302,6 +310,17 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
               <span>+ Tambah Manual Siswa</span>
             </button>
 
+            {/* Tombol Lihat Rekap Harian Otomatis */}
+            <button
+              id="view-daily-recap-btn"
+              onClick={() => setIsDailyRecapModalOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95"
+              title="Lihat rekapitulasi kehadiran otomatis dan format laporan hari ini"
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span>Lihat Rekap Harian</span>
+            </button>
+
             {/* Ekspor Excel Hari Ini */}
             <button
               id="export-daily-excel-btn"
@@ -317,20 +336,42 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
 
         {/* Existing Data Notification Indicator */}
         {hasExistingData ? (
-          <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-900 border border-emerald-200 text-xs">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>
-              <strong>Data Presensi Tersimpan:</strong> Absensi Kelas {selectedClass} pada tanggal{' '}
-              {formatIndonesianDate(selectedDate, true)} sudah tersimpan. Anda dapat mengubah status siswa kapan saja dan klik Simpan.
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-900 border border-emerald-200 text-xs">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>
+                <strong>Data Presensi Tersimpan:</strong> Absensi Kelas {selectedClass} pada tanggal{' '}
+                {formatIndonesianDate(selectedDate, true)} sudah tersimpan ({stats.hadir} Hadir, {stats.sakit} Sakit, {stats.izin} Izin, {stats.alfa} Alfa).
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsDailyRecapModalOpen(true)}
+              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-2xs transition-all flex items-center gap-1.5 active:scale-95"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>Buka Rekap Harian & Format WA</span>
+            </button>
           </div>
         ) : (
-          <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 text-amber-900 border border-amber-200 text-xs">
-            <HelpCircle className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>
-              <strong>Presensi Belum Tercatat:</strong> Belum ada rekaman kehadiran untuk Kelas {selectedClass} pada tanggal{' '}
-              {formatIndonesianDate(selectedDate, true)}.
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 text-amber-900 border border-amber-200 text-xs">
+            <div className="flex items-center gap-2">
+              <HelpCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>Presensi Belum Tercatat:</strong> Belum ada rekaman kehadiran untuk Kelas {selectedClass} pada tanggal{' '}
+                {formatIndonesianDate(selectedDate, true)}.
+              </span>
+            </div>
+            {stats.filled > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsDailyRecapModalOpen(true)}
+                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-2xs transition-all flex items-center gap-1.5 active:scale-95"
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>Pratinjau Rekap Harian</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -370,7 +411,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
             </button>
           </div>
 
-          {/* Status Counter Pills */}
+          {/* Status Counter Pills with Live % */}
           <div className="flex items-center gap-2 text-xs flex-wrap">
             <span className="px-3 py-1 rounded-xl bg-emerald-50 text-emerald-800 font-bold border border-emerald-200 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -388,11 +429,14 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
               <span className="w-2 h-2 rounded-full bg-rose-500"></span>
               Alfa: {stats.alfa}
             </span>
-            {stats.belum > 0 && (
-              <span className="px-3 py-1 rounded-xl bg-slate-100 text-slate-600 font-medium border border-slate-200">
-                Belum Diisi: {stats.belum}
-              </span>
-            )}
+            <button
+              type="button"
+              onClick={() => setIsDailyRecapModalOpen(true)}
+              className="px-3 py-1 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold shadow-2xs hover:opacity-90 transition-all flex items-center gap-1"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>Rekap Harian</span>
+            </button>
           </div>
         </div>
       </div>
@@ -655,6 +699,17 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
         settings={settings}
         showToast={showToast}
         onStudentAdded={() => loadClassStudents()}
+      />
+
+      {/* Modal Rekapitulasi Presensi Harian Otomatis */}
+      <DailyRecapModal
+        isOpen={isDailyRecapModalOpen}
+        onClose={() => setIsDailyRecapModalOpen(false)}
+        date={selectedDate}
+        selectedClass={selectedClass}
+        attendanceRows={attendanceRows}
+        settings={settings}
+        showToast={showToast}
       />
     </div>
   );

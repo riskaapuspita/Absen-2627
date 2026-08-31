@@ -10,6 +10,8 @@ import {
   Layers,
   FileText,
   Sparkles,
+  Share2,
+  Check,
 } from 'lucide-react';
 import { Student, AttendanceRecord, AppSettings, StudentRecap } from '../../types';
 import { calculateStudentRecap } from '../../services/storageService';
@@ -19,6 +21,7 @@ import {
   formatIndonesianDate,
   getDateRangePresets,
   INDONESIAN_MONTHS,
+  getTodayString,
 } from '../../utils/dateUtils';
 
 interface RecapViewProps {
@@ -39,8 +42,10 @@ export const RecapView: React.FC<RecapViewProps> = ({
   const [filterMode, setFilterMode] = useState<string>('month');
   const [selectedClass, setSelectedClass] = useState<string>('Semua');
   const [searchName, setSearchName] = useState<string>('');
+  const [copiedWA, setCopiedWA] = useState<boolean>(false);
 
   const datePresets = useMemo(() => getDateRangePresets(), []);
+  const [singleDate, setSingleDate] = useState<string>(getTodayString());
   const [customStartDate, setCustomStartDate] = useState<string>(datePresets.thisMonth.start);
   const [customEndDate, setCustomEndDate] = useState<string>(datePresets.thisMonth.end);
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
@@ -48,6 +53,12 @@ export const RecapView: React.FC<RecapViewProps> = ({
   // Determine active date range based on filterMode
   const activeDateRange = useMemo(() => {
     switch (filterMode) {
+      case 'day':
+        return {
+          start: singleDate,
+          end: singleDate,
+          label: `Harian (${formatIndonesianDate(singleDate, true)})`,
+        };
       case 'today':
         return {
           start: datePresets.today.start,
@@ -93,6 +104,7 @@ export const RecapView: React.FC<RecapViewProps> = ({
     }
   }, [
     filterMode,
+    singleDate,
     datePresets,
     selectedMonth,
     settings.semester,
@@ -162,6 +174,56 @@ export const RecapView: React.FC<RecapViewProps> = ({
     return { hadir, sakit, izin, alfa, totalAbsen, avgPercentage, count };
   }, [studentRecaps]);
 
+  // Generate WhatsApp text for current recap filter
+  const generateWhatsAppRecapText = () => {
+    const school = settings.teacherProfile?.schoolName || 'SMAN 1 LEUWILIANG by Riska Puspita';
+    const teacherName = settings.teacherProfile?.name || 'Riska Puspita, S.Pd., Kons.';
+
+    let text = `*📊 REKAPITULASI KEHADIRAN SISWA*\n`;
+    text += `*${school.toUpperCase()}*\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `📅 *Periode:* ${activeDateRange.label}\n`;
+    text += `🏫 *Filter Kelas:* ${selectedClass}\n`;
+    text += `👥 *Total Siswa Terdata:* ${totals.count} Orang\n\n`;
+    text += `*RINGKASAN TOTAL:* \n`;
+    text += `✅ Hadir: ${totals.hadir} catatan\n`;
+    text += `🤒 Sakit: ${totals.sakit} catatan\n`;
+    text += `📝 Izin: ${totals.izin} catatan\n`;
+    text += `❌ Alfa: ${totals.alfa} catatan\n`;
+    text += `📈 Rata-rata Kehadiran: ${totals.avgPercentage}%\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━\n`;
+
+    // Highlight students with Alfa / Low attendance
+    const studentsWithAlfa = studentRecaps.filter((r) => r.alfa > 0);
+    if (studentsWithAlfa.length > 0) {
+      text += `\n*DAFTAR SISWA MEMILIKI ALFA (PERHATIAN BK):*\n`;
+      studentsWithAlfa.slice(0, 15).forEach((r, idx) => {
+        text += `${idx + 1}. ${r.student.nama} (${r.student.kelas}) - Alfa: ${r.alfa}x, Kehadiran: ${r.percentage}%\n`;
+      });
+      if (studentsWithAlfa.length > 15) {
+        text += `...dan ${studentsWithAlfa.length - 15} siswa lainnya.\n`;
+      }
+    }
+
+    text += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `_Laporan otomatis Sistem Rekapitulasi Presensi Guru BK_\n`;
+    text += `_Guru BK: ${teacherName}_\n`;
+
+    return text;
+  };
+
+  const handleCopyWhatsApp = async () => {
+    const text = generateWhatsAppRecapText();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedWA(true);
+      showToast('success', 'Laporan Disalin ke Clipboard', 'Format pesan WhatsApp siap dibagikan ke Wali Kelas / Grup Guru.');
+      setTimeout(() => setCopiedWA(false), 3000);
+    } catch {
+      showToast('error', 'Gagal Menyalin', 'Silakan salin teks secara manual.');
+    }
+  };
+
   // Handle Export to Excel (.xlsx)
   const handleExportExcel = () => {
     exportRecapToExcel(studentRecaps, settings, {
@@ -209,12 +271,12 @@ export const RecapView: React.FC<RecapViewProps> = ({
                 Rekapitulasi Kehadiran Siswa
               </h2>
               <p className="text-xs text-slate-500">
-                Laporan komprehensif kehadiran, persentase absensi, dan peringatan dini Guru BK
+                Laporan komprehensif kehadiran, persentase absensi otomatis, dan peringatan dini Guru BK
               </p>
             </div>
           </div>
 
-          {/* Action buttons: Export Excel (.xlsx), CSV, and Print */}
+          {/* Action buttons: Export Excel (.xlsx), CSV, WhatsApp, and Print */}
           <div className="flex flex-wrap items-center gap-2">
             <button
               id="export-recap-excel-btn"
@@ -223,6 +285,16 @@ export const RecapView: React.FC<RecapViewProps> = ({
             >
               <FileSpreadsheet className="w-4 h-4" />
               <span>Ekspor Excel (.xlsx)</span>
+            </button>
+
+            <button
+              id="copy-recap-wa-btn"
+              onClick={handleCopyWhatsApp}
+              className="px-3.5 py-2 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 hover:bg-teal-100 text-teal-800 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 active:scale-95"
+              title="Salin ringkasan rekapitulasi ke format pesan WhatsApp"
+            >
+              {copiedWA ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4 text-teal-600" />}
+              <span>{copiedWA ? 'Tersalin!' : 'Salin Laporan WA'}</span>
             </button>
 
             <button
@@ -258,7 +330,8 @@ export const RecapView: React.FC<RecapViewProps> = ({
               onChange={(e) => setFilterMode(e.target.value)}
               className="w-full text-xs font-medium text-slate-800 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
             >
-              <option value="today">Harian (Hari Ini)</option>
+              <option value="day">Harian (Pilih Tanggal)</option>
+              <option value="today">Hari Ini</option>
               <option value="week">Mingguan (Minggu Ini)</option>
               <option value="month">Bulanan</option>
               <option value="semester">Per Semester</option>
@@ -266,6 +339,20 @@ export const RecapView: React.FC<RecapViewProps> = ({
               <option value="all">Seluruh Riwayat</option>
             </select>
           </div>
+
+          {/* Single Day Picker (if mode = day) */}
+          {filterMode === 'day' && (
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1 block">Pilih Tanggal:</label>
+              <input
+                id="recap-single-date-input"
+                type="date"
+                value={singleDate}
+                onChange={(e) => setSingleDate(e.target.value)}
+                className="w-full text-xs font-medium text-slate-800 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden cursor-pointer"
+              />
+            </div>
+          )}
 
           {/* Bulan (if mode = month) */}
           {filterMode === 'month' && (
