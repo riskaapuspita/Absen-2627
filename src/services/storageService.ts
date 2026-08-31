@@ -486,6 +486,165 @@ export function getAttendanceByDateAndClass(date: string, kelas: string): {
   });
 }
 
+/**
+ * Bulk imports attendance records from Excel/CSV with optional auto-creation of missing students.
+ * Guarantees zero duplicate entries per student-date and syncs immediately to Firestore.
+ */
+export async function importAttendanceBulk(payload: {
+  items: Array<{
+    student_id?: string;
+    student_nama: string;
+    student_nisn?: string;
+    student_kelas?: string;
+    date: string;
+    status: AttendanceStatus;
+    note?: string;
+  }>;
+  autoCreateNewStudents?: boolean;
+}): Promise<{
+  recordsCreated: number;
+  recordsUpdated: number;
+  studentsCreated: number;
+}> {
+  const currentStudents = getStudents();
+  const studentMap = new Map<string, Student>();
+  currentStudents.forEach((s) => {
+    if (s.nisn) studentMap.set(s.nisn.toLowerCase().trim(), s);
+    if (s.nis) studentMap.set(s.nis.toLowerCase().trim(), s);
+    studentMap.set(s.nama.toLowerCase().trim(), s);
+    studentMap.set(s.id, s);
+  });
+
+  const newlyCreatedStudents: Student[] = [];
+  const autoCreate = payload.autoCreateNewStudents !== false;
+
+  // 1. Resolve / Create Students
+  payload.items.forEach((item) => {
+    const matched =
+      (item.student_id && studentMap.get(item.student_id)) ||
+      (item.student_nisn && studentMap.get(item.student_nisn.toLowerCase().trim())) ||
+      studentMap.get(item.student_nama.toLowerCase().trim());
+
+    if (matched) {
+      item.student_id = matched.id;
+    } else if (autoCreate && item.student_nama) {
+      const cleanNisn = item.student_nisn && item.student_nisn.length >= 4 
+        ? item.student_nisn 
+        : `008${Math.floor(1000000 + Math.random() * 9000000)}`;
+      
+      const newStd: Student = {
+        id: 'std-imp-' + Date.now() + '-' + Math.floor(Math.random() * 10000) + '-' + newlyCreatedStudents.length,
+        nisn: cleanNisn,
+        nis: '',
+        nama: item.student_nama.trim(),
+        kelas: item.student_kelas || 'X-1',
+        jenis_kelamin: 'L',
+        status: 'Aktif',
+        nama_ortu: '',
+        no_hp_ortu: '',
+        alamat: '',
+        created_at: new Date().toISOString(),
+      };
+
+      currentStudents.push(newStd);
+      newlyCreatedStudents.push(newStd);
+      studentMap.set(newStd.id, newStd);
+      if (newStd.nisn) studentMap.set(newStd.nisn.toLowerCase().trim(), newStd);
+      studentMap.set(newStd.nama.toLowerCase().trim(), newStd);
+      item.student_id = newStd.id;
+    }
+  });
+
+  if (newlyCreatedStudents.length > 0) {
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(currentStudents));
+  }
+
+  // 2. Process Attendance Records
+  const allAttendance = getAttendanceRecords();
+  const attendanceIndexMap = new Map<string, number>();
+  allAttendance.forEach((rec, idx) => {
+    attendanceIndexMap.set(`${rec.student_id}_${rec.attendance_date}`, idx);
+  });
+
+  let recordsCreated = 0;
+  let recordsUpdated = 0;
+  const now = new Date().toISOString();
+  const changedAttendance: AttendanceRecord[] = [];
+
+  payload.items.forEach((item) => {
+    if (!item.student_id || !item.date || !item.status) return;
+
+    const key = `${item.student_id}_${item.date}`;
+    const existingIdx = attendanceIndexMap.get(key);
+
+    if (existingIdx !== undefined && existingIdx >= 0) {
+      const existing = allAttendance[existingIdx];
+      const updated: AttendanceRecord = {
+        ...existing,
+        status: item.status,
+        note: item.note !== undefined ? item.note : existing.note,
+        updated_at: now,
+      };
+      allAttendance[existingIdx] = updated;
+      changedAttendance.push(updated);
+      recordsUpdated++;
+    } else {
+      const newRec: AttendanceRecord = {
+        id: `att-${item.student_id}-${item.date}`,
+        student_id: item.student_id,
+        attendance_date: item.date,
+        status: item.status,
+        note: item.note || '',
+        created_at: now,
+        updated_at: now,
+      };
+      allAttendance.push(newRec);
+      attendanceIndexMap.set(key, allAttendance.length - 1);
+      changedAttendance.push(newRec);
+      recordsCreated++;
+    }
+  });
+
+  // Save to Local Storage
+  localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(allAttendance));
+  notifySubscribers();
+
+  // 3. Batch Sync to Cloud Firestore (chunked in groups of 350 to respect Firestore batch limit)
+  try {
+    const CHUNK_SIZE = 350;
+
+    // Sync new students
+    for (let i = 0; i < newlyCreatedStudents.length; i += CHUNK_SIZE) {
+      const chunk = newlyCreatedStudents.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach((st) => {
+        batch.set(doc(db, COLLECTIONS.STUDENTS, st.id), st);
+      });
+      await batch.commit();
+    }
+
+    // Sync changed attendance records
+    for (let i = 0; i < changedAttendance.length; i += CHUNK_SIZE) {
+      const chunk = changedAttendance.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach((rec) => {
+        batch.set(doc(db, COLLECTIONS.ATTENDANCE, rec.id), rec);
+      });
+      await batch.commit();
+    }
+
+    updateSyncState({ lastSyncedAt: new Date() });
+  } catch (err) {
+    console.error('Cloud Firestore batch sync failed during bulk attendance import:', err);
+  }
+
+  return {
+    recordsCreated,
+    recordsUpdated,
+    studentsCreated: newlyCreatedStudents.length,
+  };
+}
+
 // --- SETTINGS REPOSITORY ---
 
 export function getSettings(): AppSettings {

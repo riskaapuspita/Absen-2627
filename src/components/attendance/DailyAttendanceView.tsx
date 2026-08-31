@@ -27,6 +27,7 @@ import { triggerColorfulConfetti } from '../../utils/confetti';
 import { ImportClassExcelModal } from '../common/ImportClassExcelModal';
 import { ManualAddStudentModal } from '../common/ManualAddStudentModal';
 import { DailyRecapModal } from './DailyRecapModal';
+import { ImportAttendanceModal } from '../recap/ImportAttendanceModal';
 
 interface DailyAttendanceViewProps {
   students: Student[];
@@ -60,6 +61,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
 
   // Modals for Import & Manual Add
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [isImportAttendanceExcelModalOpen, setIsImportAttendanceExcelModalOpen] = useState<boolean>(false);
   const [isManualAddModalOpen, setIsManualAddModalOpen] = useState<boolean>(false);
   const [isDailyRecapModalOpen, setIsDailyRecapModalOpen] = useState<boolean>(false);
 
@@ -288,15 +290,26 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
               </select>
             </div>
 
-            {/* Impor Excel Absen 1 Kelas (Maks. 50 Siswa) */}
+            {/* Impor Rekap Excel Bulanan / Log */}
+            <button
+              id="import-full-attendance-excel-btn"
+              onClick={() => setIsImportAttendanceExcelModalOpen(true)}
+              className="px-3 py-2 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-300 hover:bg-teal-100 text-teal-900 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 cursor-pointer"
+              title="Impor file Excel rekapitulasi presensi bulanan / multi-tanggal"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>Impor Rekap Excel</span>
+            </button>
+
+            {/* Impor Daftar Siswa 1 Kelas */}
             <button
               id="import-daily-class-excel-btn"
               onClick={() => setIsImportModalOpen(true)}
-              className="px-3 py-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 shadow-2xs active:scale-95"
-              title="Impor data absen siswa untuk kelas ini dari file Excel (Maksimal 50 siswa)"
+              className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 cursor-pointer"
+              title="Impor daftar siswa untuk kelas ini dari file Excel"
             >
-              <Upload className="w-4 h-4 text-emerald-600" />
-              <span>Impor Excel Absen (Maks. 50)</span>
+              <Upload className="w-4 h-4 text-slate-500" />
+              <span>Daftar Siswa (.xlsx)</span>
             </button>
 
             {/* Tambah Manual Nama Siswa */}
@@ -710,6 +723,24 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
         attendanceRows={attendanceRows}
         settings={settings}
         showToast={showToast}
+      />
+
+      {/* Modal Impor Rekap Absensi Excel */}
+      <ImportAttendanceModal
+        isOpen={isImportAttendanceExcelModalOpen}
+        onClose={() => setIsImportAttendanceExcelModalOpen(false)}
+        students={students}
+        settings={settings}
+        defaultClass={selectedClass}
+        onSuccess={(summary) => {
+          triggerColorfulConfetti();
+          loadClassStudents();
+          showToast(
+            'success',
+            'Impor Rekap Presensi Berhasil',
+            `Berhasil memproses ${summary.recordsCreated + summary.recordsUpdated} data absensi (${summary.recordsCreated} baru, ${summary.recordsUpdated} diupdate, +${summary.studentsCreated} siswa baru).`
+          );
+        }}
       />
     </div>
   );

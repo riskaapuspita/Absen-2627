@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "Student": {
+      "title": "Student",
+      "description": "Data induk siswa SMAN 1 Leuwiliang",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique student identifier" },
+        "nisn": { "type": "string", "description": "Nomor Induk Siswa Nasional" },
+        "nis": { "type": "string", "description": "Nomor Induk Sekolah" },
+        "nama": { "type": "string", "description": "Nama lengkap siswa" },
+        "kelas": { "type": "string", "description": "Rombongan belajar / kelas" },
+        "jenis_kelamin": { "type": "string", "enum": ["L", "P"], "description": "Jenis kelamin" },
+        "status": { "type": "string", "enum": ["Aktif", "Nonaktif", "Mutasi", "Lulus"], "description": "Status keaktifan siswa" },
+        "nama_ortu": { "type": "string", "description": "Nama orang tua / wali" },
+        "no_hp_ortu": { "type": "string", "description": "Nomor kontak WhatsApp orang tua" },
+        "alamat": { "type": "string", "description": "Alamat domisili siswa" },
+        "created_at": { "type": "string", "description": "Timestamp data dibuat" }
+      },
+      "required": ["id", "nisn", "nama", "kelas", "jenis_kelamin", "status"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Catatan presensi harian per siswa",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique attendance record identifier" },
+        "student_id": { "type": "string", "description": "Reference ID ke student" },
+        "attendance_date": { "type": "string", "description": "Tanggal presensi YYYY-MM-DD" },
+        "status": { "type": "string", "enum": ["hadir", "sakit", "izin", "alfa"], "description": "Status kehadiran siswa" },
+        "note": { "type": "string", "description": "Catatan atau keterangan izin/sakit" },
+        "created_at": { "type": "string", "description": "Waktu catatan dibuat" },
+        "updated_at": { "type": "string", "description": "Waktu catatan terakhir diupdate" }
+      },
+      "required": ["id", "student_id", "attendance_date", "status"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Pengaturan sekolah dan guru BK",
+      "type": "object",
+      "properties": {
+        "academicYear": { "type": "string" },
+        "semester": { "type": "string" },
+        "targetClasses": { "type": "array" },
+        "warningThresholds": { "type": "object" },
+        "teacherProfile": { "type": "object" }
+      }
+    },
+    "BKNote": {
+      "title": "BKNote",
+      "description": "Catatan konseling dan tindak lanjut Guru BK",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "student_id": { "type": "string" },
+        "date": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "action_taken": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "student_id", "date", "category", "description"]
+    }
+  },
+  "firestore": {
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Koleksi data master siswa"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": { "$ref": "#/entities/AttendanceRecord" },
+      "description": "Koleksi catatan absensi siswa"
+    },
+    "/settings/{settingsId}": {
+      "schema": { "$ref": "#/entities/AppSettings" },
+      "description": "Pengaturan aplikasi dan profil guru"
+    },
+    "/bk_notes/{noteId}": {
+      "schema": { "$ref": "#/entities/BKNote" },
+      "description": "Catatan konseling bimbingan"
+    }
+  }
+}

@@ -12,11 +12,13 @@ import {
   Sparkles,
   Share2,
   Check,
+  Upload,
 } from 'lucide-react';
 import { Student, AttendanceRecord, AppSettings, StudentRecap } from '../../types';
 import { calculateStudentRecap } from '../../services/storageService';
 import { exportRecapToExcel, exportRecapToCSV } from '../../utils/exportUtils';
 import { triggerColorfulConfetti } from '../../utils/confetti';
+import { ImportAttendanceModal } from './ImportAttendanceModal';
 import {
   formatIndonesianDate,
   getDateRangePresets,
@@ -43,6 +45,7 @@ export const RecapView: React.FC<RecapViewProps> = ({
   const [selectedClass, setSelectedClass] = useState<string>('Semua');
   const [searchName, setSearchName] = useState<string>('');
   const [copiedWA, setCopiedWA] = useState<boolean>(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
 
   const datePresets = useMemo(() => getDateRangePresets(), []);
   const [singleDate, setSingleDate] = useState<string>(getTodayString());
@@ -276,12 +279,22 @@ export const RecapView: React.FC<RecapViewProps> = ({
             </div>
           </div>
 
-          {/* Action buttons: Export Excel (.xlsx), CSV, WhatsApp, and Print */}
+          {/* Action buttons: Import Excel, Export Excel (.xlsx), CSV, WhatsApp, and Print */}
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              id="import-recap-excel-btn"
+              onClick={() => setIsImportModalOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-300 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 active:scale-95 shadow-2xs cursor-pointer"
+              title="Unggah dan impor file Excel rekapitulasi/matriks presensi bulanan"
+            >
+              <Upload className="w-4 h-4 text-emerald-600" />
+              <span>Impor Rekap Excel</span>
+            </button>
+
             <button
               id="export-recap-excel-btn"
               onClick={handleExportExcel}
-              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 active:scale-95"
+              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
             >
               <FileSpreadsheet className="w-4 h-4" />
               <span>Ekspor Excel (.xlsx)</span>
@@ -668,6 +681,23 @@ export const RecapView: React.FC<RecapViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Import Attendance from Excel Modal */}
+      <ImportAttendanceModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        students={students}
+        settings={settings}
+        defaultClass={selectedClass}
+        onSuccess={(summary) => {
+          triggerColorfulConfetti();
+          showToast(
+            'success',
+            'Impor Rekap Presensi Berhasil',
+            `Berhasil memproses ${summary.recordsCreated + summary.recordsUpdated} data absensi (${summary.recordsCreated} baru, ${summary.recordsUpdated} diupdate, +${summary.studentsCreated} siswa baru).`
+          );
+        }}
+      />
     </div>
   );
 };
