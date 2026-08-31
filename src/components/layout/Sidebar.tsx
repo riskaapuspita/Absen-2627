@@ -113,16 +113,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Quick BK Status Card */}
-        <div className="p-4 mx-3 my-3 rounded-xl bg-slate-800/60 border border-slate-700/60">
-          <div className="flex items-center justify-between text-xs text-slate-300 mb-1">
-            <span className="font-semibold text-slate-200">Status Absensi BK</span>
+        <div className="p-4 mx-3 my-3 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
+          <div className="flex items-center justify-between text-xs text-slate-300">
+            <span className="font-semibold text-slate-200">Database Cloud</span>
             <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/60">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-              Aktif
+              Online Multi-Device
             </span>
           </div>
           <p className="text-[11px] text-slate-400 leading-relaxed">
-            Pantau kehadiran, identifikasi dini siswa alfa, dan buat rekapitulasi cepat.
+            Data absensi & rekapitulasi tersinkronisasi otomatis di semua HP dan Laptop secara online.
           </p>
         </div>
 

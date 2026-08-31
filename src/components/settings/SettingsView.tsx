@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   School,
@@ -15,6 +15,11 @@ import {
   CheckCircle2,
   Sparkles,
   Link,
+  Cloud,
+  RefreshCw,
+  Smartphone,
+  Laptop,
+  Globe,
 } from 'lucide-react';
 import { AppSettings } from '../../types';
 import {
@@ -22,7 +27,9 @@ import {
   resetDatabase,
   exportAllDataAsJSON,
   importAllDataFromJSON,
+  syncAllLocalToCloud,
 } from '../../services/storageService';
+import { subscribeToSyncStatus, CloudSyncStatus } from '../../services/firebase';
 
 interface SettingsViewProps {
   settings: AppSettings;
@@ -41,6 +48,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, showToast 
   const [supabaseKey, setSupabaseKey] = useState<string>(
     localStorage.getItem('sia_bk_supabase_key') || ''
   );
+
+  const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>('connected');
+  const [lastSynced, setLastSynced] = useState<Date | null>(new Date());
+  const [isSyncingAll, setIsSyncingAll] = useState<boolean>(false);
+
+  useEffect(() => {
+    const unsub = subscribeToSyncStatus((state) => {
+      setSyncStatus(state.status);
+      if (state.lastSyncedAt) {
+        setLastSynced(state.lastSyncedAt);
+      }
+    });
+    return unsub;
+  }, []);
+
+  const handleForceSync = async () => {
+    setIsSyncingAll(true);
+    const success = await syncAllLocalToCloud();
+    setIsSyncingAll(false);
+    if (success) {
+      showToast('success', 'Sinkronisasi Berhasil', 'Seluruh data lokal berhasil diunggah ke Firebase Cloud.');
+    } else {
+      showToast('error', 'Sinkronisasi Gagal', 'Periksa koneksi internet Anda.');
+    }
+  };
 
   // Handle save core settings
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -430,16 +462,84 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, showToast 
           </div>
         </div>
 
-        {/* Section 5: Integrasi Database & Google Spreadsheet */}
+        {/* Section 5: Integrasi Cloud Firebase (Multi-Device Online) */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-emerald-50 text-emerald-700">
+                <Cloud className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Sinkronisasi Cloud Firebase (Multi-Perangkat Online)</h3>
+                <p className="text-xs text-slate-500">
+                  Data tersimpan online dan tersinkronisasi otomatis secara real-time di seluruh HP, laptop, dan tablet
+                </p>
+              </div>
+            </div>
+
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping" />
+              Real-Time Online
+            </span>
+          </div>
+
+          <div className="space-y-3 text-xs">
+            <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <p className="font-bold text-emerald-950 text-sm">Status Sinkronisasi: Terhubung</p>
+                <p className="text-slate-600 text-xs mt-0.5">
+                  Setiap kali Guru menginput presensi, menambah siswa, atau mencatat konseling BK, data otomatis disinkronkan ke cloud.
+                </p>
+                <p className="text-[11px] text-emerald-800 font-mono mt-1">
+                  Waktu sinkron terakhir: {lastSynced ? lastSynced.toLocaleString('id-ID') : 'Aktif'}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleForceSync}
+                disabled={isSyncingAll}
+                className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow-xs transition-all flex items-center gap-2 shrink-0 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${isSyncingAll ? 'animate-spin' : ''}`} />
+                <span>{isSyncingAll ? 'Mengunggah...' : 'Sinkronkan Semua Data'}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="flex items-center gap-2 text-slate-800 font-bold mb-1">
+                  <Globe className="w-4 h-4 text-emerald-600" />
+                  <span>Akses Multi-Device</span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Cukup buka tautan web aplikasi ini pada peramban (Chrome / Safari / Edge) di HP atau Laptop Anda. Semua data akan langsung termuat tanpa perlu login ulang.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="flex items-center gap-2 text-slate-800 font-bold mb-1">
+                  <Database className="w-4 h-4 text-teal-600" />
+                  <span>Teknologi Offline-First</span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Jika jaringan internet sekolah sempat terputus, data tetap aman tersimpan di memori perangkat dan otomatis terunggah saat online kembali.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 6: Integrasi Spreadsheet Opsional */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
           <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
             <div className="p-2 rounded-xl bg-purple-50 text-purple-700">
               <Link className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 text-sm">Integrasi Database Cloud & Spreadsheet</h3>
+              <h3 className="font-bold text-slate-900 text-sm">Integrasi Tambahan Google Spreadsheet (Opsional)</h3>
               <p className="text-xs text-slate-500">
-                Koneksikan dengan Google Spreadsheet (Google Apps Script Web App) atau Supabase untuk sinkronisasi cloud
+                Koneksikan dengan Google Apps Script Web App jika ingin ekspor sekunder ke Google Sheets
               </p>
             </div>
           </div>
