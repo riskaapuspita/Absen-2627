@@ -17,10 +17,18 @@ import {
   UserPlus,
   Upload,
   BarChart3,
-  Share2,
+  Clock,
+  History,
+  TrendingUp,
+  AlertOctagon,
+  ChevronRight,
 } from 'lucide-react';
 import { Student, AttendanceRecord, AppSettings, AttendanceStatus } from '../../types';
-import { saveDailyAttendance, getAttendanceByDateAndClass } from '../../services/storageService';
+import {
+  saveDailyAttendance,
+  getAttendanceByDateAndClass,
+  calculateStudentRecap,
+} from '../../services/storageService';
 import { formatIndonesianDate, getTodayString } from '../../utils/dateUtils';
 import { exportDailyAttendanceToExcel } from '../../utils/exportUtils';
 import { triggerColorfulConfetti } from '../../utils/confetti';
@@ -45,6 +53,15 @@ interface StudentAttendanceRow {
   isExisting: boolean;
 }
 
+interface SaveSuccessSummary {
+  date: string;
+  className: string;
+  created: number;
+  updated: number;
+  totalAttendanceDays: number;
+  avgPercentage: number;
+}
+
 export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
   students,
   attendanceRecords,
@@ -58,12 +75,27 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
   const [attendanceRows, setAttendanceRows] = useState<StudentAttendanceRow[]>([]);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [hasExistingData, setHasExistingData] = useState<boolean>(false);
+  const [saveSuccessSummary, setSaveSuccessSummary] = useState<SaveSuccessSummary | null>(null);
+
+  // In-app Unfilled Confirmation Modal state
+  const [unfilledConfirmOpen, setUnfilledConfirmOpen] = useState<boolean>(false);
 
   // Modals for Import & Manual Add
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
   const [isImportAttendanceExcelModalOpen, setIsImportAttendanceExcelModalOpen] = useState<boolean>(false);
   const [isManualAddModalOpen, setIsManualAddModalOpen] = useState<boolean>(false);
   const [isDailyRecapModalOpen, setIsDailyRecapModalOpen] = useState<boolean>(false);
+
+  // Helper relative dates
+  const getRelativeDaysAgo = (daysAgo: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - daysAgo);
+    return d.toISOString().split('T')[0];
+  };
+
+  const todayStr = getTodayString();
+  const isPastDate = selectedDate < todayStr;
+  const isToday = selectedDate === todayStr;
 
   // Load students for chosen date and class
   const loadClassStudents = () => {
@@ -89,7 +121,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
     setAttendanceRows(rows);
   };
 
-  // Re-sync when selectedDate, selectedClass, or students change
+  // Re-sync when selectedDate, selectedClass, students, or attendanceRecords change
   useEffect(() => {
     loadClassStudents();
   }, [selectedDate, selectedClass, students, attendanceRecords]);
@@ -112,9 +144,30 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
     );
   };
 
+  // Bulk action: Mark only remaining unfilled as Hadir
+  const handleMarkUnfilledAsHadir = () => {
+    let count = 0;
+    setAttendanceRows((prev) =>
+      prev.map((row) => {
+        if (row.status === null) {
+          count++;
+          return { ...row, status: 'hadir', isModified: true };
+        }
+        return row;
+      })
+    );
+
+    showToast(
+      'info',
+      'Sisa Siswa Diset Hadir',
+      `${count} siswa yang belum terisi kini diset Hadir. Siswa yang sakit/izin/alfa tetap dipertahankan.`
+    );
+  };
+
   // Reset to previous or blank
   const handleResetAttendance = () => {
     loadClassStudents();
+    setSaveSuccessSummary(null);
     showToast('info', 'Form Absensi Direset', 'Mengembalikan formulir ke data awal tersimpan.');
   };
 
@@ -152,7 +205,72 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
     );
   };
 
-  // Save Attendance
+  // Perform the actual save operation
+  const executeSave = (defaultUnfilledStatus: AttendanceStatus = 'alfa') => {
+    if (!selectedClass) {
+      showToast('error', 'Validasi Gagal', 'Silakan pilih kelas terlebih dahulu.');
+      return;
+    }
+
+    if (!selectedDate) {
+      showToast('error', 'Validasi Gagal', 'Silakan pilih tanggal absensi terlebih dahulu.');
+      return;
+    }
+
+    setIsSaving(true);
+    setUnfilledConfirmOpen(false);
+
+    try {
+      const recordsToSave = attendanceRows.map((row) => ({
+        student_id: row.student.id,
+        status: (row.status || defaultUnfilledStatus) as AttendanceStatus,
+        note: row.note.trim() || undefined,
+      }));
+
+      const result = saveDailyAttendance(selectedDate, recordsToSave);
+
+      setIsSaving(false);
+      setHasExistingData(true);
+      triggerColorfulConfetti();
+
+      // Compute updated cumulative stats for banner
+      const classStudents = students.filter(
+        (s) => s.kelas === selectedClass && s.status === 'Aktif'
+      );
+      const classStudentIds = new Set(classStudents.map((s) => s.id));
+      const classRecords = attendanceRecords.filter((r) => classStudentIds.has(r.student_id));
+      // Add current date to set
+      const allDates = new Set(classRecords.map((r) => r.attendance_date));
+      allDates.add(selectedDate);
+
+      const totalHadirCount = classRecords.filter((r) => r.status === 'hadir').length + recordsToSave.filter((r) => r.status === 'hadir').length;
+      const totalAllEntries = (classRecords.length + recordsToSave.length) || 1;
+      const avgPercentage = Math.round((totalHadirCount / totalAllEntries) * 100);
+
+      setSaveSuccessSummary({
+        date: selectedDate,
+        className: selectedClass,
+        created: result.created,
+        updated: result.updated,
+        totalAttendanceDays: allDates.size,
+        avgPercentage: isNaN(avgPercentage) ? 100 : avgPercentage,
+      });
+
+      showToast(
+        'success',
+        isPastDate ? 'Presensi Tanggal Lampau Tersimpan' : 'Presensi Berhasil Disimpan',
+        `Data presensi Kelas ${selectedClass} (${result.created} baru, ${result.updated} diperbarui) berhasil disimpan dan langsung terakumulasi otomatis ke rekapitulasi semester.`
+      );
+
+      // Open automatic daily recap modal right after save
+      setIsDailyRecapModalOpen(true);
+    } catch {
+      setIsSaving(false);
+      showToast('error', 'Gagal Menyimpan', 'Terjadi kesalahan saat menyimpan data absensi.');
+    }
+  };
+
+  // Save Attendance trigger
   const handleSave = () => {
     if (!selectedClass) {
       showToast('error', 'Validasi Gagal', 'Silakan pilih kelas terlebih dahulu.');
@@ -167,38 +285,11 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
     // Check unfilled students
     const unfilled = attendanceRows.filter((r) => r.status === null);
     if (unfilled.length > 0) {
-      const confirmSave = window.confirm(
-        `Ada ${unfilled.length} siswa yang belum dipilih statusnya. Siswa tersebut akan otomatis ditandai 'Alfa' jika disimpan. Lanjutkan?`
-      );
-      if (!confirmSave) return;
+      setUnfilledConfirmOpen(true);
+      return;
     }
 
-    setIsSaving(true);
-
-    try {
-      const recordsToSave = attendanceRows.map((row) => ({
-        student_id: row.student.id,
-        status: (row.status || 'alfa') as AttendanceStatus,
-        note: row.note.trim() || undefined,
-      }));
-
-      const result = saveDailyAttendance(selectedDate, recordsToSave);
-
-      setIsSaving(false);
-      setHasExistingData(true);
-      triggerColorfulConfetti();
-      showToast(
-        'success',
-        'Presensi Berhasil Disimpan',
-        `Data presensi Kelas ${selectedClass} (${result.created} baru, ${result.updated} diperbarui) tanggal ${formatIndonesianDate(selectedDate, true)} berhasil tersimpan.`
-      );
-
-      // Open automatic daily recap modal right after save!
-      setIsDailyRecapModalOpen(true);
-    } catch (e) {
-      setIsSaving(false);
-      showToast('error', 'Gagal Menyimpan', 'Terjadi kesalahan saat menyimpan data absensi.');
-    }
+    executeSave('alfa');
   };
 
   // Filtered rows by search query
@@ -236,6 +327,17 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
     return { total, filled, hadir, sakit, izin, alfa, belum, percentage };
   }, [attendanceRows]);
 
+  // Student cumulative stats cache for fast table display
+  const studentCumulativeMap = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof calculateStudentRecap>>();
+    students.forEach((s) => {
+      if (s.kelas === selectedClass) {
+        map.set(s.id, calculateStudentRecap(s, attendanceRecords, settings.warningThresholds));
+      }
+    });
+    return map;
+  }, [students, selectedClass, attendanceRecords, settings.warningThresholds]);
+
   return (
     <div className="space-y-6 pb-20">
       {/* Top Filter & Control Panel */}
@@ -246,11 +348,25 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
               <Calendar className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">
-                Pencatatan Presensi Harian Siswa
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900">
+                  Pencatatan Presensi Harian Siswa
+                </h2>
+                {isPastDate && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                    <History className="w-3 h-3 text-amber-600" />
+                    <span>Tanggal Lampau / Susulan</span>
+                  </span>
+                )}
+                {isToday && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-emerald-600" />
+                    <span>Hari Ini</span>
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-500">
-                Pilih tanggal dan rombel kelas, lalu tentukan status kehadiran Hadir, Sakit, Izin, atau Alfa
+                Pilih tanggal dan rombel kelas. Presensi yang disimpan (termasuk tanggal yang terlewat) langsung terakumulasi otomatis ke rekapitulasi semester.
               </p>
             </div>
           </div>
@@ -266,9 +382,58 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                 id="daily-date-input"
                 type="date"
                 value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  setSaveSuccessSummary(null);
+                }}
                 className="text-xs font-bold text-slate-800 bg-transparent border-0 focus:ring-0 focus:outline-hidden cursor-pointer"
               />
+            </div>
+
+            {/* Quick Date Presets */}
+            <div className="hidden sm:flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDate(todayStr);
+                  setSaveSuccessSummary(null);
+                }}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                  selectedDate === todayStr
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Hari Ini
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDate(getRelativeDaysAgo(1));
+                  setSaveSuccessSummary(null);
+                }}
+                className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                  selectedDate === getRelativeDaysAgo(1)
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Kemarin
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDate(getRelativeDaysAgo(2));
+                  setSaveSuccessSummary(null);
+                }}
+                className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                  selectedDate === getRelativeDaysAgo(2)
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                H-2
+              </button>
             </div>
 
             {/* Kelas */}
@@ -279,7 +444,10 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
               <select
                 id="daily-class-select"
                 value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value)}
+                onChange={(e) => {
+                  setSelectedClass(e.target.value);
+                  setSaveSuccessSummary(null);
+                }}
                 className="text-xs font-bold text-slate-800 bg-transparent border-0 focus:ring-0 focus:outline-hidden cursor-pointer"
               >
                 {settings.classList.map((cls) => (
@@ -316,29 +484,29 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
             <button
               id="add-manual-daily-student-btn"
               onClick={() => setIsManualAddModalOpen(true)}
-              className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95"
+              className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
               title="Tambah nama siswa secara manual ke kelas ini"
             >
               <UserPlus className="w-4 h-4" />
               <span>+ Tambah Manual Siswa</span>
             </button>
 
-            {/* Tombol Lihat Rekap Harian Otomatis */}
+            {/* Tombol Lihat Rekap Harian & Akumulasi Otomatis */}
             <button
               id="view-daily-recap-btn"
               onClick={() => setIsDailyRecapModalOpen(true)}
-              className="px-3.5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95"
+              className="px-3.5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
               title="Lihat rekapitulasi kehadiran otomatis dan format laporan hari ini"
             >
               <BarChart3 className="w-4 h-4" />
-              <span>Lihat Rekap Harian</span>
+              <span>Lihat Rekap & Akumulasi</span>
             </button>
 
             {/* Ekspor Excel Hari Ini */}
             <button
               id="export-daily-excel-btn"
               onClick={handleExportTodayExcel}
-              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors flex items-center gap-1.5"
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
               title="Unduh format spreadsheet harian"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
@@ -346,6 +514,54 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Informative Banner for Past Dates */}
+        {isPastDate && (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl bg-amber-50/90 text-amber-900 border border-amber-300 text-xs">
+            <div className="flex items-center gap-2">
+              <History className="w-4 h-4 text-amber-700 shrink-0" />
+              <span>
+                <strong>Mode Pengisian Tanggal Lampau ({formatIndonesianDate(selectedDate, true)}):</strong> Anda dapat mengisi atau memperbarui data presensi tanggal yang sudah terlewat kapan saja. Saat disimpan, seluruh data presensi ini akan langsung diakumulasikan otomatis ke dalam rekapitulasi semester siswa dan kelas.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Post-Save Success & Automatic Accumulation Banner */}
+        {saveSuccessSummary && (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-md text-xs animate-in fade-in duration-200">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-white/20">
+                <CheckCircle2 className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="font-extrabold text-sm">
+                  Data Presensi Berhasil Disimpan & Langsung Terakumulasi Otomatis!
+                </p>
+                <p className="text-emerald-100 text-[11px] mt-0.5">
+                  Tanggal: <strong>{formatIndonesianDate(saveSuccessSummary.date, true)}</strong> &bull; Kelas {saveSuccessSummary.className} &bull; Total Terdata: {saveSuccessSummary.totalAttendanceDays} Hari Belajar ({saveSuccessSummary.avgPercentage}% Rata-rata Kehadiran)
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsDailyRecapModalOpen(true)}
+                className="px-3.5 py-1.5 bg-white text-emerald-800 hover:bg-emerald-50 text-xs font-bold rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>Buka Rekap & Format WA</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSaveSuccessSummary(null)}
+                className="px-2.5 py-1.5 bg-emerald-800/60 hover:bg-emerald-800 text-emerald-200 text-xs rounded-lg transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Existing Data Notification Indicator */}
         {hasExistingData ? (
@@ -360,7 +576,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
             <button
               type="button"
               onClick={() => setIsDailyRecapModalOpen(true)}
-              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-2xs transition-all flex items-center gap-1.5 active:scale-95"
+              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-2xs transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
             >
               <BarChart3 className="w-3.5 h-3.5" />
               <span>Buka Rekap Harian & Format WA</span>
@@ -379,7 +595,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsDailyRecapModalOpen(true)}
-                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-2xs transition-all flex items-center gap-1.5 active:scale-95"
+                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-2xs transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
               >
                 <BarChart3 className="w-3.5 h-3.5" />
                 <span>Pratinjau Rekap Harian</span>
@@ -395,17 +611,30 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
             <button
               id="mark-all-hadir-btn"
               onClick={handleMarkAllHadir}
-              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2"
+              className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <CheckCheck className="w-4 h-4" />
               <span>Hadirkan Semua</span>
             </button>
 
+            {/* Tombol Isi Sisa Belum Terisi Sebagai Hadir */}
+            {stats.belum > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkUnfilledAsHadir}
+                className="px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold text-xs rounded-xl border border-teal-300 transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="Hanya isi siswa yang belum dipilih statusnya menjadi Hadir"
+              >
+                <Check className="w-3.5 h-3.5 text-teal-600" />
+                <span>Isi Sisa ({stats.belum}) Hadir</span>
+              </button>
+            )}
+
             {/* Tombol Reset Absensi */}
             <button
               id="reset-attendance-btn"
               onClick={handleResetAttendance}
-              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors flex items-center gap-1.5"
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
               title="Kembalikan formulir ke data awal"
             >
               <RotateCcw className="w-4 h-4" />
@@ -417,10 +646,10 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
               id="save-daily-attendance-btn"
               onClick={handleSave}
               disabled={isSaving}
-              className="px-5 py-2 bg-slate-900 hover:bg-black active:scale-95 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+              className="px-5 py-2 bg-slate-900 hover:bg-black active:scale-95 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               <Save className="w-4 h-4" />
-              <span>{isSaving ? 'Menyimpan...' : 'Simpan Presensi'}</span>
+              <span>{isSaving ? 'Menyimpan & Akumulasi...' : 'Simpan Presensi'}</span>
             </button>
           </div>
 
@@ -445,7 +674,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
             <button
               type="button"
               onClick={() => setIsDailyRecapModalOpen(true)}
-              className="px-3 py-1 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold shadow-2xs hover:opacity-90 transition-all flex items-center gap-1"
+              className="px-3 py-1 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold shadow-2xs hover:opacity-90 transition-all flex items-center gap-1 cursor-pointer"
             >
               <BarChart3 className="w-3.5 h-3.5" />
               <span>Rekap Harian</span>
@@ -479,16 +708,18 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
             <thead>
               <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
                 <th className="py-3.5 px-4 w-12 text-center">No</th>
-                <th className="py-3.5 px-4">Nama Siswa</th>
+                <th className="py-3.5 px-4">Nama Siswa & Akumulasi</th>
                 <th className="py-3.5 px-3 w-24 text-center">NISN</th>
                 <th className="py-3.5 px-3 w-16 text-center">L/P</th>
-                <th className="py-3.5 px-4 text-center min-w-[320px]">Status Kehadiran</th>
+                <th className="py-3.5 px-4 text-center min-w-[320px]">Status Kehadiran ({formatIndonesianDate(selectedDate, false)})</th>
                 <th className="py-3.5 px-4 min-w-[200px]">Catatan / Keterangan</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {filteredRows.length > 0 ? (
                 filteredRows.map((row, idx) => {
+                  const cumulRecap = studentCumulativeMap.get(row.student.id);
+
                   return (
                     <tr
                       key={row.student.id}
@@ -507,18 +738,35 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                         {idx + 1}
                       </td>
 
-                      {/* Nama Siswa */}
+                      {/* Nama Siswa & Akumulasi Semester */}
                       <td className="py-3 px-4">
                         <button
                           type="button"
                           onClick={() => onOpenStudentDetail(row.student)}
-                          className="font-bold text-slate-900 hover:text-emerald-700 text-left block"
+                          className="font-bold text-slate-900 hover:text-emerald-700 text-left block cursor-pointer"
                         >
                           {row.student.nama}
                         </button>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {row.student.nis ? `NIS: ${row.student.nis}` : ''}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                          {cumulRecap && (
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              Akumulasi: <strong className="text-emerald-700">{cumulRecap.hadir}H</strong> &bull; <strong className="text-amber-700">{cumulRecap.sakit}S</strong> &bull; <strong className="text-sky-700">{cumulRecap.izin}I</strong> &bull; <strong className="text-rose-700">{cumulRecap.alfa}A</strong> ({cumulRecap.percentage}%)
+                            </span>
+                          )}
+                          {cumulRecap && cumulRecap.warningLevel !== 'aman' && (
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase ${
+                                cumulRecap.warningLevel === 'prioritas'
+                                  ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                                  : cumulRecap.warningLevel === 'merah'
+                                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+                              }`}
+                            >
+                              {cumulRecap.warningLevel} ({cumulRecap.alfa}A)
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* NISN */}
@@ -547,7 +795,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                             type="button"
                             id={`status-hadir-${row.student.id}`}
                             onClick={() => handleStatusChange(row.student.id, 'hadir')}
-                            className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                            className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                               row.status === 'hadir'
                                 ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/20'
                                 : 'text-slate-600 hover:bg-slate-200'
@@ -562,7 +810,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                             type="button"
                             id={`status-sakit-${row.student.id}`}
                             onClick={() => handleStatusChange(row.student.id, 'sakit')}
-                            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                               row.status === 'sakit'
                                 ? 'bg-amber-500 text-white shadow-sm ring-2 ring-amber-500/20'
                                 : 'text-slate-600 hover:bg-slate-200'
@@ -577,7 +825,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                             type="button"
                             id={`status-izin-${row.student.id}`}
                             onClick={() => handleStatusChange(row.student.id, 'izin')}
-                            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                               row.status === 'izin'
                                 ? 'bg-sky-500 text-white shadow-sm ring-2 ring-sky-500/20'
                                 : 'text-slate-600 hover:bg-slate-200'
@@ -592,7 +840,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                             type="button"
                             id={`status-alfa-${row.student.id}`}
                             onClick={() => handleStatusChange(row.student.id, 'alfa')}
-                            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                               row.status === 'alfa'
                                 ? 'bg-rose-600 text-white shadow-sm ring-2 ring-rose-500/20'
                                 : 'text-slate-600 hover:bg-slate-200'
@@ -613,9 +861,9 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                             row.status === 'sakit'
                               ? 'Contoh: Surat dokter / flu demam'
                               : row.status === 'izin'
-                              ? 'Contoh: Izin acara keluarga'
+                              ? 'Contoh: Izin urusan keluarga'
                               : row.status === 'alfa'
-                              ? 'Contoh: Tanpa keterangan / bolos'
+                              ? 'Contoh: Tanpa keterangan / tidak hadir'
                               : 'Keterangan tambahan...'
                           }
                           value={row.note}
@@ -645,7 +893,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                         <button
                           type="button"
                           onClick={() => setIsManualAddModalOpen(true)}
-                          className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-xs text-xs flex items-center gap-1.5 active:scale-95"
+                          className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-xs text-xs flex items-center gap-1.5 active:scale-95 cursor-pointer"
                         >
                           <UserPlus className="w-4 h-4" />
                           <span>+ Tambah Manual Nama Siswa</span>
@@ -653,7 +901,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
                         <button
                           type="button"
                           onClick={() => setIsImportModalOpen(true)}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs text-xs flex items-center gap-1.5 active:scale-95"
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs text-xs flex items-center gap-1.5 active:scale-95 cursor-pointer"
                         >
                           <Upload className="w-4 h-4" />
                           <span>Impor Excel Absen (Maks. 50)</span>
@@ -671,13 +919,18 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4">
           <div className="text-xs text-slate-600">
             Progress Pengisian: <strong>{stats.filled}</strong> dari <strong>{stats.total}</strong> siswa ({stats.percentage}%)
+            {isPastDate && (
+              <span className="ml-2 font-bold text-amber-700">
+                &bull; Tanggal Lampau: {formatIndonesianDate(selectedDate, false)}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
             <button
               id="bottom-mark-all-btn"
               onClick={handleMarkAllHadir}
-              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition-colors"
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition-colors cursor-pointer"
             >
               Hadirkan Semua
             </button>
@@ -685,7 +938,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
               id="bottom-save-btn"
               onClick={handleSave}
               disabled={isSaving}
-              className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50 active:scale-95"
+              className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50 active:scale-95 cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span>Simpan Presensi Kelas {selectedClass}</span>
@@ -693,6 +946,58 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal for Unfilled Students */}
+      {unfilledConfirmOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <h3 className="text-base font-extrabold text-slate-900">
+                Ada {stats.belum} Siswa Belum Dipilih Statusnya
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Terdapat {stats.belum} siswa pada tanggal {formatIndonesianDate(selectedDate, true)} yang belum ditentukan status kehadirannya. Silakan pilih tindakan otomatis berikut:
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  // Mark unfilled as Hadir then save
+                  handleMarkUnfilledAsHadir();
+                  executeSave('hadir');
+                }}
+                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95"
+              >
+                <Check className="w-4 h-4" />
+                <span>Tandai Sisa Siswa Sebagai HADIR lalu Simpan</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => executeSave('alfa')}
+                className="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95"
+              >
+                <XCircle className="w-4 h-4" />
+                <span>Tandai Sisa Siswa Sebagai ALFA lalu Simpan</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setUnfilledConfirmOpen(false)}
+                className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Batal, Saya Ingin Periksa Manual
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Import Excel 1 Kelas (Maks. 50 Siswa) */}
       <ImportClassExcelModal
@@ -714,7 +1019,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
         onStudentAdded={() => loadClassStudents()}
       />
 
-      {/* Modal Rekapitulasi Presensi Harian Otomatis */}
+      {/* Modal Rekapitulasi Presensi Harian & Akumulasi Otomatis */}
       <DailyRecapModal
         isOpen={isDailyRecapModalOpen}
         onClose={() => setIsDailyRecapModalOpen(false)}
@@ -722,6 +1027,8 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
         selectedClass={selectedClass}
         attendanceRows={attendanceRows}
         settings={settings}
+        students={students}
+        attendanceRecords={attendanceRecords}
         showToast={showToast}
       />
 

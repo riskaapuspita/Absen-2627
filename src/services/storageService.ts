@@ -60,6 +60,37 @@ function notifySubscribers() {
   });
 }
 
+// Merge local and remote attendance records safely without data loss
+export function mergeAttendanceRecords(
+  localRecords: AttendanceRecord[],
+  remoteRecords: AttendanceRecord[]
+): AttendanceRecord[] {
+  const map = new Map<string, AttendanceRecord>();
+
+  // 1. Seed with local records
+  localRecords.forEach((rec) => {
+    const key = `${rec.student_id}_${rec.attendance_date}`;
+    map.set(key, rec);
+  });
+
+  // 2. Overlay remote records with conflict resolution based on timestamp
+  remoteRecords.forEach((remoteRec) => {
+    const key = `${remoteRec.student_id}_${remoteRec.attendance_date}`;
+    const localRec = map.get(key);
+    if (!localRec) {
+      map.set(key, remoteRec);
+    } else {
+      const remoteTime = remoteRec.updated_at ? new Date(remoteRec.updated_at).getTime() : 0;
+      const localTime = localRec.updated_at ? new Date(localRec.updated_at).getTime() : 0;
+      if (remoteTime >= localTime) {
+        map.set(key, remoteRec);
+      }
+    }
+  });
+
+  return Array.from(map.values());
+}
+
 // Track active Firestore unsubscribe handles
 let unsubscribes: Unsubscribe[] = [];
 let isFirebaseInitialized = false;
@@ -159,7 +190,10 @@ export function initFirebaseSync(): void {
           snapshot.forEach((docSnap) => {
             remoteAttendance.push(docSnap.data() as AttendanceRecord);
           });
-          localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(remoteAttendance));
+          // Merge remote with local records to ensure no past date or newly saved data is lost
+          const localAttendance = getAttendanceRecords();
+          const merged = mergeAttendanceRecords(localAttendance, remoteAttendance);
+          localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(merged));
           notifySubscribers();
         } else {
           // Cloud attendance is empty: seed existing local attendance
@@ -232,13 +266,15 @@ export function initFirebaseSync(): void {
 // Seed Helpers for Initial Cloud Sync
 async function seedStudentsToCloud(students: Student[]) {
   try {
-    const batch = writeBatch(db);
-    // Firestore batch max 500 operations
-    const chunk = students.slice(0, 450);
-    chunk.forEach((st) => {
-      batch.set(doc(db, COLLECTIONS.STUDENTS, st.id), st);
-    });
-    await batch.commit();
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < students.length; i += CHUNK_SIZE) {
+      const chunk = students.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach((st) => {
+        batch.set(doc(db, COLLECTIONS.STUDENTS, st.id), st);
+      });
+      await batch.commit();
+    }
   } catch (e) {
     console.error('Failed to seed students to Firestore:', e);
   }
@@ -246,12 +282,15 @@ async function seedStudentsToCloud(students: Student[]) {
 
 async function seedAttendanceToCloud(records: AttendanceRecord[]) {
   try {
-    const batch = writeBatch(db);
-    const chunk = records.slice(0, 450);
-    chunk.forEach((rec) => {
-      batch.set(doc(db, COLLECTIONS.ATTENDANCE, rec.id), rec);
-    });
-    await batch.commit();
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+      const chunk = records.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach((rec) => {
+        batch.set(doc(db, COLLECTIONS.ATTENDANCE, rec.id), rec);
+      });
+      await batch.commit();
+    }
   } catch (e) {
     console.error('Failed to seed attendance to Firestore:', e);
   }
@@ -259,12 +298,15 @@ async function seedAttendanceToCloud(records: AttendanceRecord[]) {
 
 async function seedBKNotesToCloud(notes: BKNote[]) {
   try {
-    const batch = writeBatch(db);
-    const chunk = notes.slice(0, 450);
-    chunk.forEach((n) => {
-      batch.set(doc(db, COLLECTIONS.BK_NOTES, n.id), n);
-    });
-    await batch.commit();
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < notes.length; i += CHUNK_SIZE) {
+      const chunk = notes.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach((n) => {
+        batch.set(doc(db, COLLECTIONS.BK_NOTES, n.id), n);
+      });
+      await batch.commit();
+    }
   } catch (e) {
     console.error('Failed to seed BK notes to Firestore:', e);
   }
@@ -410,6 +452,8 @@ export function saveDailyAttendance(
   date: string,
   records: Array<{ student_id: string; status: AttendanceStatus; note?: string }>
 ): { updated: number; created: number } {
+  // Normalize date string to ensure YYYY-MM-DD
+  const normalizedDate = date.trim().split('T')[0];
   const allAttendance = getAttendanceRecords();
   let created = 0;
   let updated = 0;
@@ -418,7 +462,7 @@ export function saveDailyAttendance(
 
   records.forEach((rec) => {
     const existingIndex = allAttendance.findIndex(
-      (a) => a.attendance_date === date && a.student_id === rec.student_id
+      (a) => a.attendance_date === normalizedDate && a.student_id === rec.student_id
     );
 
     if (existingIndex >= 0) {
@@ -433,9 +477,9 @@ export function saveDailyAttendance(
       updated++;
     } else {
       const newRec: AttendanceRecord = {
-        id: `att-${rec.student_id}-${date}`,
+        id: `att-${rec.student_id}-${normalizedDate}`,
         student_id: rec.student_id,
-        attendance_date: date,
+        attendance_date: normalizedDate,
         status: rec.status,
         note: rec.note,
         created_at: now,
@@ -447,22 +491,28 @@ export function saveDailyAttendance(
     }
   });
 
-  // 1. Update Local Storage
+  // 1. Immediately update Local Storage so all views accumulate without waiting
   localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(allAttendance));
   notifySubscribers();
 
-  // 2. Sync changed records to Cloud Firestore
-  try {
-    const batch = writeBatch(db);
-    changedRecords.slice(0, 450).forEach((item) => {
-      batch.set(doc(db, COLLECTIONS.ATTENDANCE, item.id), item);
-    });
-    batch
-      .commit()
-      .then(() => updateSyncState({ lastSyncedAt: new Date() }))
-      .catch((err) => console.error('Cloud attendance batch sync failed:', err));
-  } catch (err) {
-    console.error('Firestore batch error for attendance:', err);
+  // 2. Sync changed records to Cloud Firestore in chunks
+  if (changedRecords.length > 0) {
+    (async () => {
+      try {
+        const CHUNK_SIZE = 400;
+        for (let i = 0; i < changedRecords.length; i += CHUNK_SIZE) {
+          const chunk = changedRecords.slice(i, i + CHUNK_SIZE);
+          const batch = writeBatch(db);
+          chunk.forEach((item) => {
+            batch.set(doc(db, COLLECTIONS.ATTENDANCE, item.id), item);
+          });
+          await batch.commit();
+        }
+        updateSyncState({ lastSyncedAt: new Date() });
+      } catch (err) {
+        console.error('Cloud attendance batch sync failed:', err);
+      }
+    })();
   }
 
   return { updated, created };
