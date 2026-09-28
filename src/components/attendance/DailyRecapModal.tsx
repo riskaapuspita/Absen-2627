@@ -17,6 +17,7 @@ import {
   Info,
   BarChart3,
   TrendingUp,
+  HeartPulse,
 } from 'lucide-react';
 import { Student, AppSettings, AttendanceStatus, AttendanceRecord } from '../../types';
 import { calculateStudentRecap } from '../../services/storageService';
@@ -148,6 +149,10 @@ export const DailyRecapModal: React.FC<DailyRecapModalProps> = ({
       .filter((sr) => sr.warningLevel !== 'aman')
       .sort((a, b) => b.alfa - a.alfa);
 
+    const sickWarningStudents = studentRecaps
+      .filter((sr) => sr.isSickWarning)
+      .sort((a, b) => b.sakit - a.sakit);
+
     return {
       totalAttendanceDays,
       uniqueDates,
@@ -158,6 +163,7 @@ export const DailyRecapModal: React.FC<DailyRecapModalProps> = ({
       avgPercentage,
       studentRecaps,
       warningStudents,
+      sickWarningStudents,
     };
   }, [students, selectedClass, attendanceRecords, settings.warningThresholds]);
 
@@ -166,6 +172,7 @@ export const DailyRecapModal: React.FC<DailyRecapModalProps> = ({
     const formattedDate = formatIndonesianDate(date, true);
     const school = settings.teacherProfile?.schoolName || 'SMAN 1 LEUWILIANG by Riska Puspita';
     const teacherName = settings.teacherProfile?.name || 'Riska Puspita, S.Pd., Kons.';
+    const sickThreshold = settings.warningThresholds?.sickWarning ?? 10;
 
     let text = `*📊 REKAPITULASI PRESENSI HARIAN SISWA*\n`;
     text += `*${school.toUpperCase()}*\n`;
@@ -217,6 +224,13 @@ export const DailyRecapModal: React.FC<DailyRecapModalProps> = ({
       text += `• Total Hari Belajar Terdata: ${classCumulativeStats.totalAttendanceDays} Hari\n`;
       text += `• Rata-rata Kehadiran Kumulatif: ${classCumulativeStats.avgPercentage}%\n`;
       text += `• Total Akumulasi Alfa Kelas: ${classCumulativeStats.totalAlfa} kali\n`;
+
+      if (includeCumulativeWarnings && classCumulativeStats.sickWarningStudents.length > 0) {
+        text += `\n*🩺 PERINGATAN KESEHATAN (SAKIT ≥${sickThreshold} HARI):*\n`;
+        classCumulativeStats.sickWarningStudents.forEach((ws, idx) => {
+          text += `${idx + 1}. ${ws.student.nama} (${ws.sakit}x Sakit) - Perlu Cek Surat Dokter/UKS\n`;
+        });
+      }
 
       if (includeCumulativeWarnings && classCumulativeStats.warningStudents.length > 0) {
         text += `\n*⚠️ SISWA PERLU PERHATIAN BK (AKUMULASI ALFA):*\n`;
@@ -665,9 +679,14 @@ export const DailyRecapModal: React.FC<DailyRecapModalProps> = ({
                     {classCumulativeStats.totalSakit + classCumulativeStats.totalIzin}{' '}
                     <span className="text-xs font-normal">Kali</span>
                   </p>
-                  <span className="text-[10px] text-amber-700">
+                  <span className="text-[10px] text-amber-700 block">
                     {classCumulativeStats.totalSakit} Sakit &bull; {classCumulativeStats.totalIzin} Izin
                   </span>
+                  {classCumulativeStats.sickWarningStudents.length > 0 && (
+                    <span className="text-[10px] text-orange-800 font-extrabold block mt-0.5">
+                      ⚠️ {classCumulativeStats.sickWarningStudents.length} Siswa Sakit ≥{settings.warningThresholds?.sickWarning ?? 10}x
+                    </span>
+                  )}
                 </div>
 
                 <div className="bg-gradient-to-br from-rose-50 to-red-50 p-3.5 rounded-xl border border-rose-200">
@@ -681,7 +700,36 @@ export const DailyRecapModal: React.FC<DailyRecapModalProps> = ({
                 </div>
               </div>
 
-              {/* Warning Students Box */}
+              {/* Sick Warning Students Box */}
+              {classCumulativeStats.sickWarningStudents.length > 0 && (
+                <div className="p-3.5 bg-orange-50/90 border border-orange-300 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-orange-950 font-bold text-xs">
+                    <HeartPulse className="w-4 h-4 text-orange-600 shrink-0" />
+                    <span>Peringatan Kesehatan: Akumulasi Sakit Berkepanjangan ({classCumulativeStats.sickWarningStudents.length} Siswa ≥{settings.warningThresholds?.sickWarning ?? 10} Hari)</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {classCumulativeStats.sickWarningStudents.map((ws) => (
+                      <div
+                        key={ws.student.id}
+                        className="p-2.5 bg-white rounded-lg border border-orange-200 flex items-center justify-between text-xs shadow-2xs"
+                      >
+                        <div>
+                          <p className="font-bold text-slate-900">{ws.student.nama}</p>
+                          <span className="text-[10px] text-slate-500">
+                            Total Sakit: <strong className="text-orange-700">{ws.sakit} Hari</strong> &bull; Total Hadir: {ws.hadir}x ({ws.percentage}%)
+                          </span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-orange-100 text-orange-900 border border-orange-300 flex items-center gap-1">
+                          <HeartPulse className="w-3 h-3 text-orange-600" />
+                          Sakit ≥10x
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Warning Students Box (Alfa) */}
               {classCumulativeStats.warningStudents.length > 0 && (
                 <div className="p-4 bg-amber-50/80 border border-amber-300 rounded-xl space-y-2.5">
                   <div className="flex items-center gap-2 text-amber-900 font-bold">
@@ -729,7 +777,7 @@ export const DailyRecapModal: React.FC<DailyRecapModalProps> = ({
                       <th className="p-2.5 text-center w-16">Izin</th>
                       <th className="p-2.5 text-center w-16">Alfa</th>
                       <th className="p-2.5 text-center w-24">% Hadir</th>
-                      <th className="p-2.5 text-center w-28">Status BK</th>
+                      <th className="p-2.5 text-center w-36">Status BK</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -743,24 +791,43 @@ export const DailyRecapModal: React.FC<DailyRecapModalProps> = ({
                           </span>
                         </td>
                         <td className="p-2.5 text-center font-semibold text-emerald-700">{sr.hadir}</td>
-                        <td className="p-2.5 text-center font-semibold text-amber-700">{sr.sakit}</td>
+                        <td className="p-2.5 text-center font-semibold text-amber-700">
+                          {sr.isSickWarning ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-black bg-orange-100 text-orange-900 border border-orange-300">
+                              <HeartPulse className="w-3 h-3 text-orange-600" />
+                              {sr.sakit}
+                            </span>
+                          ) : (
+                            sr.sakit
+                          )}
+                        </td>
                         <td className="p-2.5 text-center font-semibold text-sky-700">{sr.izin}</td>
                         <td className="p-2.5 text-center font-extrabold text-rose-700">{sr.alfa}</td>
                         <td className="p-2.5 text-center font-bold text-slate-700">{sr.percentage}%</td>
                         <td className="p-2.5 text-center">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                              sr.warningLevel === 'prioritas'
-                                ? 'bg-purple-100 text-purple-800 border border-purple-300'
-                                : sr.warningLevel === 'merah'
-                                ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                                : sr.warningLevel === 'kuning'
-                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            }`}
-                          >
-                            {sr.warningLevel}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            {sr.isSickWarning && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-orange-100 text-orange-900 border border-orange-300">
+                                <HeartPulse className="w-2.5 h-2.5 text-orange-600" />
+                                Sakit ≥10x
+                              </span>
+                            )}
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                                sr.warningLevel === 'prioritas'
+                                  ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                                  : sr.warningLevel === 'merah'
+                                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                  : sr.warningLevel === 'kuning'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                  : !sr.isSickWarning
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'text-slate-400 text-[10px]'
+                              }`}
+                            >
+                              {sr.warningLevel}
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     ))}

@@ -16,6 +16,7 @@ import {
   Sparkles,
   PieChart as PieChartIcon,
   BarChart3,
+  HeartPulse,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -131,6 +132,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       .filter((r) => r.alfa > 0)
       .sort((a, b) => b.alfa - a.alfa || b.totalAbsen - a.totalAbsen)
       .slice(0, 5);
+  }, [studentRecaps]);
+
+  // Top Sick Students (Sakit Terbanyak / Peringatan Sakit)
+  const topSickStudents = useMemo(() => {
+    return [...studentRecaps]
+      .filter((r) => r.isSickWarning || r.sakit > 0)
+      .sort((a, b) => b.sakit - a.sakit || b.totalAbsen - a.totalAbsen)
+      .slice(0, 5);
+  }, [studentRecaps]);
+
+  // Sick Warning Students count
+  const sickWarningStudents = useMemo(() => {
+    return [...studentRecaps].filter((r) => r.isSickWarning);
   }, [studentRecaps]);
 
   // Top Total Absent Students (Sakit + Izin + Alfa)
@@ -583,165 +597,289 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* BK Attention & Early Warning Lists */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Siswa dengan Alfa Terbanyak (BK Warning Thresholds) */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-rose-100 text-rose-700">
-                <AlertOctagon className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">
-                  Siswa dengan Akumulasi Alfa Terbanyak
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Deteksi dini siswa dengan potensi drop-out atau pelanggaran disiplin
-                </p>
-              </div>
+      {/* Sick Warning Alert Banner if Any Student >= Threshold */}
+      {sickWarningStudents.length > 0 && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 border border-orange-300 shadow-xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-orange-100 text-orange-700 border border-orange-200 shadow-2xs">
+              <HeartPulse className="w-5 h-5 text-orange-600" />
             </div>
-            <button
-              id="view-all-recap-alfa-btn"
-              onClick={() => onNavigate('recap')}
-              className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
-            >
-              Lihat Rekap
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
+            <div>
+              <h4 className="text-sm font-bold text-orange-950 flex items-center gap-2">
+                <span>Peringatan Kesehatan Siswa: {sickWarningStudents.length} Siswa dengan Sakit ≥ {settings.warningThresholds?.sickWarning ?? 10} Hari</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-orange-600 text-white uppercase">
+                  Perhatian UKS & BK
+                </span>
+              </h4>
+              <p className="text-xs text-orange-850 mt-0.5">
+                Terdapat siswa dengan akumulasi sakit mencapai batas maksimal. Segera verifikasi surat dokter dan koordinasikan pendampingan kesehatan.
+              </p>
+            </div>
           </div>
+          <button
+            onClick={() => onNavigate('recap')}
+            className="px-3.5 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>Buka Rekapitulasi Sakit</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
-          <div className="divide-y divide-slate-100">
-            {topAlfaStudents.length > 0 ? (
-              topAlfaStudents.map((recap) => {
-                let badgeStyle = 'bg-slate-100 text-slate-700 border-slate-200';
-                let badgeLabel = 'Aman';
+      {/* BK Attention & Early Warning Lists */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {/* Siswa dengan Alfa Terbanyak (BK Warning Thresholds) */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-rose-100 text-rose-700">
+                  <AlertOctagon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Akumulasi Alfa Terbanyak
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Deteksi dini siswa potensi SP / panggilan orang tua
+                  </p>
+                </div>
+              </div>
+              <button
+                id="view-all-recap-alfa-btn"
+                onClick={() => onNavigate('recap')}
+                className="text-xs font-bold text-rose-700 hover:text-rose-800 flex items-center gap-1 cursor-pointer"
+              >
+                Rekap
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
-                if (recap.warningLevel === 'prioritas') {
-                  badgeStyle = 'bg-rose-100 text-rose-800 border-rose-300 animate-pulse';
-                  badgeLabel = 'Prioritas Tindak Lanjut BK';
-                } else if (recap.warningLevel === 'merah') {
-                  badgeStyle = 'bg-red-100 text-red-700 border-red-200';
-                  badgeLabel = 'Peringatan Merah (SP II / Panggilan Ortu)';
-                } else if (recap.warningLevel === 'kuning') {
-                  badgeStyle = 'bg-amber-100 text-amber-800 border-amber-200';
-                  badgeLabel = 'Peringatan Kuning (SP I)';
-                }
+            <div className="divide-y divide-slate-100">
+              {topAlfaStudents.length > 0 ? (
+                topAlfaStudents.map((recap) => {
+                  let badgeStyle = 'bg-slate-100 text-slate-700 border-slate-200';
+                  let badgeLabel = 'Aman';
 
-                return (
-                  <div
-                    key={recap.student.id}
-                    onClick={() => onOpenStudentDetail(recap.student)}
-                    className="py-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 px-2 rounded-xl cursor-pointer transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-700 font-bold text-xs flex items-center justify-center border border-rose-200">
-                        {recap.student.jenis_kelamin}
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-slate-900 leading-snug hover:text-emerald-700">
-                          {recap.student.nama}
-                        </p>
-                        <div className="flex items-center gap-2 text-xs text-slate-500">
-                          <span>Kelas {recap.student.kelas}</span>
-                          <span>&bull;</span>
-                          <span>NISN: {recap.student.nisn}</span>
+                  if (recap.warningLevel === 'prioritas') {
+                    badgeStyle = 'bg-rose-100 text-rose-800 border-rose-300 animate-pulse';
+                    badgeLabel = 'Prioritas BK';
+                  } else if (recap.warningLevel === 'merah') {
+                    badgeStyle = 'bg-red-100 text-red-700 border-red-200';
+                    badgeLabel = 'Peringatan Merah';
+                  } else if (recap.warningLevel === 'kuning') {
+                    badgeStyle = 'bg-amber-100 text-amber-800 border-amber-200';
+                    badgeLabel = 'Peringatan Kuning';
+                  }
+
+                  return (
+                    <div
+                      key={recap.student.id}
+                      onClick={() => onOpenStudentDetail(recap.student)}
+                      className="py-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 px-2 rounded-xl cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-700 font-bold text-xs flex items-center justify-center border border-rose-200">
+                          {recap.student.jenis_kelamin}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-900 leading-snug hover:text-emerald-700">
+                            {recap.student.nama}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <span>Kelas {recap.student.kelas}</span>
+                            <span>&bull;</span>
+                            <span>NISN: {recap.student.nisn}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <span className="text-base font-black text-rose-600">
-                          {recap.alfa}x Alfa
+                      <div className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-base font-black text-rose-600">
+                            {recap.alfa}x Alfa
+                          </span>
+                        </div>
+                        <span
+                          className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-bold mt-1 ${badgeStyle}`}
+                        >
+                          {badgeLabel}
                         </span>
                       </div>
-                      <span
-                        className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-bold mt-1 ${badgeStyle}`}
-                      >
-                        {badgeLabel}
-                      </span>
                     </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="py-8 text-center text-xs text-slate-400">
-                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                Tidak ada siswa dengan catatan alfa pada periode ini. Kondisi tertib!
+                  );
+                })
+              ) : (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                  Tidak ada siswa dengan catatan alfa pada periode ini. Tertib!
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Siswa dengan Peringatan Sakit (>=10x) / Sakit Terbanyak */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-orange-100 text-orange-700">
+                  <HeartPulse className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Peringatan Sakit (≥{settings.warningThresholds?.sickWarning ?? 10} Hari)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Monitoring siswa dengan catatan kendala kesehatan
+                  </p>
+                </div>
               </div>
-            )}
+              <button
+                id="view-all-recap-sick-btn"
+                onClick={() => onNavigate('recap')}
+                className="text-xs font-bold text-orange-700 hover:text-orange-800 flex items-center gap-1 cursor-pointer"
+              >
+                Rekap
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {topSickStudents.length > 0 ? (
+                topSickStudents.map((recap) => {
+                  return (
+                    <div
+                      key={recap.student.id}
+                      onClick={() => onOpenStudentDetail(recap.student)}
+                      className="py-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 px-2 rounded-xl cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-9 h-9 rounded-xl font-bold text-xs flex items-center justify-center border ${
+                            recap.isSickWarning
+                              ? 'bg-orange-100 text-orange-800 border-orange-300 ring-2 ring-orange-200/60'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}
+                        >
+                          <HeartPulse className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-900 leading-snug hover:text-emerald-700">
+                            {recap.student.nama}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <span>Kelas {recap.student.kelas}</span>
+                            <span>&bull;</span>
+                            <span>NISN: {recap.student.nisn}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span
+                            className={`text-base font-black ${
+                              recap.isSickWarning ? 'text-orange-600' : 'text-amber-600'
+                            }`}
+                          >
+                            {recap.sakit} Hari
+                          </span>
+                        </div>
+                        <span
+                          className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-bold mt-1 ${
+                            recap.isSickWarning
+                              ? 'bg-orange-100 text-orange-900 border-orange-300 animate-pulse'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                          }`}
+                        >
+                          {recap.isSickWarning ? 'Peringatan Sakit' : 'Pantauan Medis'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                  Tidak ada catatan sakit pada periode ini.
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Siswa dengan Total Ketidakhadiran Terbanyak (Sakit + Izin + Alfa) */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-amber-100 text-amber-700">
-                <AlertTriangle className="w-4 h-4" />
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-100 text-amber-700">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Ketidakhadiran Tertinggi (S+I+A)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Total hari tidak hadir untuk pemantauan akademik
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">
-                  Siswa dengan Ketidakhadiran Tertinggi (S + I + A)
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Total akumulasi hari tidak hadir yang memerlukan pemantauan akademik
-                </p>
-              </div>
+              <button
+                id="view-all-recap-absent-btn"
+                onClick={() => onNavigate('recap')}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+              >
+                Rekap
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
-            <button
-              id="view-all-recap-absent-btn"
-              onClick={() => onNavigate('recap')}
-              className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
-            >
-              Lihat Rekap
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
 
-          <div className="divide-y divide-slate-100">
-            {topAbsentStudents.length > 0 ? (
-              topAbsentStudents.map((recap) => {
-                return (
-                  <div
-                    key={recap.student.id}
-                    onClick={() => onOpenStudentDetail(recap.student)}
-                    className="py-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 px-2 rounded-xl cursor-pointer transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 font-black text-xs flex items-center justify-center border border-amber-200">
-                        {recap.percentage}%
+            <div className="divide-y divide-slate-100">
+              {topAbsentStudents.length > 0 ? (
+                topAbsentStudents.map((recap) => {
+                  return (
+                    <div
+                      key={recap.student.id}
+                      onClick={() => onOpenStudentDetail(recap.student)}
+                      className="py-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 px-2 rounded-xl cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 font-black text-xs flex items-center justify-center border border-amber-200">
+                          {recap.percentage}%
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-900 leading-snug hover:text-emerald-700">
+                            {recap.student.nama}
+                          </p>
+                          <p className="text-xs text-slate-500">Kelas {recap.student.kelas}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-bold text-slate-900 leading-snug hover:text-emerald-700">
-                          {recap.student.nama}
+
+                      <div className="text-right">
+                        <p className="text-sm font-black text-slate-800">
+                          {recap.totalAbsen} Hari Absen
                         </p>
-                        <p className="text-xs text-slate-500">Kelas {recap.student.kelas}</p>
+                        <div className="flex items-center justify-end gap-1.5 text-[10px] text-slate-500 mt-0.5">
+                          <span className={`font-semibold ${recap.isSickWarning ? 'text-orange-700 font-bold' : 'text-amber-600'}`}>{recap.sakit}S</span>
+                          <span>&bull;</span>
+                          <span className="text-sky-600 font-semibold">{recap.izin}I</span>
+                          <span>&bull;</span>
+                          <span className="text-rose-600 font-black">{recap.alfa}A</span>
+                        </div>
                       </div>
                     </div>
-
-                    <div className="text-right">
-                      <p className="text-sm font-black text-slate-800">
-                        {recap.totalAbsen} Hari Absen
-                      </p>
-                      <div className="flex items-center justify-end gap-1.5 text-[10px] text-slate-500 mt-0.5">
-                        <span className="text-amber-600 font-semibold">{recap.sakit}S</span>
-                        <span>&bull;</span>
-                        <span className="text-sky-600 font-semibold">{recap.izin}I</span>
-                        <span>&bull;</span>
-                        <span className="text-rose-600 font-black">{recap.alfa}A</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="py-8 text-center text-xs text-slate-400">
-                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                Seluruh siswa memiliki tingkat kehadiran 100% pada periode ini.
-              </div>
-            )}
+                  );
+                })
+              ) : (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                  Seluruh siswa memiliki tingkat kehadiran 100% pada periode ini.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

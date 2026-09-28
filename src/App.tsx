@@ -23,7 +23,7 @@ import {
   calculateStudentRecap,
 } from './services/storageService';
 import { Student, AttendanceRecord, AppSettings, StudentRecap } from './types';
-import { ShieldAlert, X, AlertTriangle, AlertOctagon } from 'lucide-react';
+import { ShieldAlert, X, AlertTriangle, AlertOctagon, HeartPulse } from 'lucide-react';
 
 export default function App() {
   // Initialize storage
@@ -71,13 +71,17 @@ export default function App() {
     return unsubscribe;
   }, []);
 
-  // Calculate urgent cases for BK (students exceeding yellow/red/priority Alfa thresholds)
+  // Calculate urgent cases for BK (students exceeding Alfa thresholds OR sick warning >= 10)
   const urgentRecaps = useMemo(() => {
     const activeStudents = students.filter((s) => s.status === 'Aktif');
     return activeStudents
       .map((s) => calculateStudentRecap(s, attendanceRecords, settings.warningThresholds))
-      .filter((r) => r.warningLevel !== 'aman')
-      .sort((a, b) => b.alfa - a.alfa);
+      .filter((r) => r.warningLevel !== 'aman' || r.isSickWarning)
+      .sort((a, b) => {
+        if (b.isSickWarning && !a.isSickWarning) return 1;
+        if (!b.isSickWarning && a.isSickWarning) return -1;
+        return b.alfa - a.alfa;
+      });
   }, [students, attendanceRecords, settings.warningThresholds]);
 
   return (
@@ -215,19 +219,36 @@ export default function App() {
                       </p>
                     </div>
 
-                    <div className="text-right">
-                      <p className="text-sm font-extrabold text-rose-600">{recap.alfa}x Alfa</p>
-                      <span
-                        className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                          recap.warningLevel === 'prioritas'
-                            ? 'bg-rose-100 text-rose-900 border border-rose-300'
-                            : recap.warningLevel === 'merah'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {recap.warningLevel.toUpperCase()}
-                      </span>
+                    <div className="text-right flex flex-col items-end gap-1">
+                      {recap.alfa > 0 && (
+                        <p className="text-xs font-extrabold text-rose-600">{recap.alfa}x Alfa</p>
+                      )}
+                      {recap.isSickWarning && (
+                        <p className="text-xs font-extrabold text-amber-600 flex items-center gap-1">
+                          <HeartPulse className="w-3.5 h-3.5 text-amber-500" />
+                          <span>{recap.sakit}x Sakit</span>
+                        </p>
+                      )}
+                      <div className="flex items-center gap-1">
+                        {recap.warningLevel !== 'aman' && (
+                          <span
+                            className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                              recap.warningLevel === 'prioritas'
+                                ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                                : recap.warningLevel === 'merah'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {recap.warningLevel.toUpperCase()}
+                          </span>
+                        )}
+                        {recap.isSickWarning && (
+                          <span className="inline-block text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                            SAKIT &ge; {settings.warningThresholds?.sickWarning ?? 10}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))

@@ -29,9 +29,10 @@ export interface AttendanceRecord {
 }
 
 export interface WarningThresholds {
-  yellow: number; // e.g. 3
-  red: number; // e.g. 5
-  priority: number; // e.g. 10
+  yellow: number; // e.g. 3 (Alfa)
+  red: number; // e.g. 5 (Alfa)
+  priority: number; // e.g. 10 (Alfa)
+  sickWarning?: number; // e.g. 10 (Sakit >= 10)
 }
 
 export interface TeacherProfile {
@@ -74,6 +75,7 @@ export interface StudentRecap {
   totalAbsen: number; // sakit + izin + alfa
   percentage: number;
   warningLevel: 'aman' | 'kuning' | 'merah' | 'prioritas';
+  isSickWarning?: boolean; // sakit >= sickWarning threshold (default 10)
 }
 
 export interface DailyClassSummary {

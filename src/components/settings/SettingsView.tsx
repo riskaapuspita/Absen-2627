@@ -20,6 +20,7 @@ import {
   Smartphone,
   Laptop,
   Globe,
+  HeartPulse,
 } from 'lucide-react';
 import { AppSettings } from '../../types';
 import {
@@ -271,7 +272,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, showToast 
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
             {/* Kuning */}
             <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200 space-y-2">
               <span className="font-bold text-amber-900 block">Peringatan Kuning (SP I)</span>
@@ -350,6 +351,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, showToast 
                   className="w-16 px-2.5 py-1.5 rounded-lg border border-rose-300 font-bold text-rose-900 bg-white"
                 />
                 <span className="text-rose-900 font-semibold">kali Alfa</span>
+              </div>
+            </div>
+
+            {/* Peringatan Sakit Kronis / Berkala */}
+            <div className="p-4 rounded-xl bg-orange-50/70 border border-orange-300 space-y-2">
+              <div className="flex items-center gap-1.5 text-orange-950">
+                <HeartPulse className="w-4 h-4 text-orange-600 shrink-0" />
+                <span className="font-bold block">Peringatan Sakit (≥10x)</span>
+              </div>
+              <p className="text-[11px] text-slate-600">
+                Deteksi dini sakit berkepanjangan untuk koordinasi UKS/Home Visit/Surat Dokter.
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={formData.warningThresholds.sickWarning ?? 10}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      warningThresholds: {
+                        ...formData.warningThresholds,
+                        sickWarning: parseInt(e.target.value, 10) || 10,
+                      },
+                    })
+                  }
+                  className="w-16 px-2.5 py-1.5 rounded-lg border border-orange-300 font-bold text-orange-900 bg-white"
+                />
+                <span className="text-orange-900 font-semibold">hari Sakit</span>
               </div>
             </div>
           </div>

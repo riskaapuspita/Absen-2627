@@ -451,7 +451,7 @@ export function getAttendanceRecords(): AttendanceRecord[] {
 export function saveDailyAttendance(
   date: string,
   records: Array<{ student_id: string; status: AttendanceStatus; note?: string }>
-): { updated: number; created: number } {
+): { updated: number; created: number; allRecords: AttendanceRecord[] } {
   // Normalize date string to ensure YYYY-MM-DD
   const normalizedDate = date.trim().split('T')[0];
   const allAttendance = getAttendanceRecords();
@@ -461,13 +461,17 @@ export function saveDailyAttendance(
   const changedRecords: AttendanceRecord[] = [];
 
   records.forEach((rec) => {
+    // Robust date matching: strip time components or whitespace to handle any past or preset date formats
     const existingIndex = allAttendance.findIndex(
-      (a) => a.attendance_date === normalizedDate && a.student_id === rec.student_id
+      (a) =>
+        (a.attendance_date ? a.attendance_date.trim().split('T')[0] : '') === normalizedDate &&
+        a.student_id === rec.student_id
     );
 
     if (existingIndex >= 0) {
       const updatedRec: AttendanceRecord = {
         ...allAttendance[existingIndex],
+        attendance_date: normalizedDate,
         status: rec.status,
         note: rec.note,
         updated_at: now,
@@ -515,19 +519,22 @@ export function saveDailyAttendance(
     })();
   }
 
-  return { updated, created };
+  return { updated, created, allRecords: allAttendance };
 }
 
 export function getAttendanceByDateAndClass(date: string, kelas: string): {
   student: Student;
   record?: AttendanceRecord;
 }[] {
+  const normalizedDate = date.trim().split('T')[0];
   const students = getStudents().filter((s) => s.kelas === kelas && s.status === 'Aktif');
   const allRecords = getAttendanceRecords();
 
   return students.map((student) => {
     const record = allRecords.find(
-      (r) => r.attendance_date === date && r.student_id === student.id
+      (r) =>
+        (r.attendance_date ? r.attendance_date.trim().split('T')[0] : '') === normalizedDate &&
+        r.student_id === student.id
     );
     return {
       student,
@@ -702,6 +709,12 @@ export function getSettings(): AppSettings {
     const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     if (!raw) return defaultSettings;
     const parsed = JSON.parse(raw);
+    if (!parsed.warningThresholds?.sickWarning) {
+      parsed.warningThresholds = {
+        ...parsed.warningThresholds,
+        sickWarning: 10,
+      };
+    }
     if (!parsed?.teacherProfile?.schoolName || parsed?.teacherProfile?.schoolName === 'SMA Negeri 1 Nusantara') {
       parsed.teacherProfile = {
         ...parsed.teacherProfile,
@@ -824,6 +837,9 @@ export function calculateStudentRecap(
     warningLevel = 'kuning';
   }
 
+  const sickThreshold = thresholds?.sickWarning ?? 10;
+  const isSickWarning = sakit >= sickThreshold;
+
   return {
     student,
     hadir,
@@ -834,6 +850,7 @@ export function calculateStudentRecap(
     totalAbsen,
     percentage,
     warningLevel,
+    isSickWarning,
   };
 }
 

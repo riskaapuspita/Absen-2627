@@ -17,6 +17,7 @@ import {
   XCircle,
   Clock,
   Send,
+  HeartPulse,
 } from 'lucide-react';
 import { Student, AttendanceRecord, AppSettings, BKNote } from '../../types';
 import {
@@ -202,6 +203,44 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
           </div>
         )}
 
+        {/* Health / Sick Warning Indicator Banner if Sakit >= Threshold */}
+        {recap.isSickWarning && (
+          <div className="px-6 py-3.5 border-b bg-gradient-to-r from-orange-50 to-amber-50 text-orange-950 border-orange-300 text-xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-orange-100 text-orange-700 border border-orange-200 shrink-0">
+                <HeartPulse className="w-5 h-5 text-orange-600" />
+              </div>
+              <div>
+                <p className="font-bold flex items-center gap-1.5 text-orange-950">
+                  <span>PERINGATAN SAKIT BERKELANJUTAN (≥{settings.warningThresholds?.sickWarning ?? 10} HARI)</span>
+                  <span className="px-2 py-0.2 bg-orange-600 text-white rounded-full text-[10px] font-black">
+                    {recap.sakit} Hari Sakit
+                  </span>
+                </p>
+                <p className="text-[11px] text-orange-800 mt-0.5">
+                  Akumulasi sakit siswa telah mencapai {recap.sakit} hari. Disarankan peninjauan surat keterangan dokter, koordinasi dengan pihak UKS/wali murid, atau bimbingan konseling kesehatan.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setActiveTab('bk-log');
+                setIsAddingBKNote(true);
+                setNewNote({
+                  category: 'Bimbingan Pribadi',
+                  title: `Konseling Kendala Kesehatan Siswa (${recap.sakit}x Sakit)`,
+                  content: `Siswa telah mencapai akumulasi izin sakit sebanyak ${recap.sakit} hari. Perlu peninjauan surat keterangan dokter dan pemantauan kondisi kesehatan siswa.`,
+                  actionTaken: 'Verifikasi surat keterangan dokter dan koordinasi dengan wali murid & UKS',
+                  followUpDate: '',
+                });
+              }}
+              className="shrink-0 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold shadow-xs text-xs transition-colors cursor-pointer"
+            >
+              Catat Bimbingan Kesehatan
+            </button>
+          </div>
+        )}
+
         {/* Attendance Statistics Grid */}
         <div className="p-4 sm:p-6 bg-slate-50 border-b border-slate-200/80">
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
@@ -213,10 +252,23 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             </div>
 
             {/* Sakit */}
-            <div className="p-3 bg-white rounded-xl border border-amber-200 text-center shadow-xs">
-              <span className="text-[10px] uppercase font-bold text-amber-800 block">Sakit (S)</span>
-              <span className="text-xl font-extrabold text-amber-600">{recap.sakit}</span>
-              <span className="text-[10px] text-slate-400 block">hari</span>
+            <div
+              className={`p-3 rounded-xl text-center shadow-xs ${
+                recap.isSickWarning
+                  ? 'bg-orange-50 border-2 border-orange-400 ring-2 ring-orange-200/60'
+                  : 'bg-white border border-amber-200'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-1">
+                <span className="text-[10px] uppercase font-bold text-amber-800 block">Sakit (S)</span>
+                {recap.isSickWarning && <HeartPulse className="w-3 h-3 text-orange-600 inline" />}
+              </div>
+              <span className={`text-xl font-extrabold ${recap.isSickWarning ? 'text-orange-700' : 'text-amber-600'}`}>
+                {recap.sakit}
+              </span>
+              <span className="text-[10px] text-slate-400 block">
+                {recap.isSickWarning ? '⚠️ Perlu Perhatian' : 'hari'}
+              </span>
             </div>
 
             {/* Izin */}

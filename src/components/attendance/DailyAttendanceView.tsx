@@ -28,6 +28,7 @@ import {
   saveDailyAttendance,
   getAttendanceByDateAndClass,
   calculateStudentRecap,
+  getAttendanceRecords,
 } from '../../services/storageService';
 import { formatIndonesianDate, getTodayString } from '../../utils/dateUtils';
 import { exportDailyAttendanceToExcel } from '../../utils/exportUtils';
@@ -229,22 +230,33 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
 
       const result = saveDailyAttendance(selectedDate, recordsToSave);
 
+      // Immediately mark local rows as saved / unmodified / existing
+      setAttendanceRows((prev) =>
+        prev.map((row) => ({
+          ...row,
+          status: row.status || defaultUnfilledStatus,
+          isModified: false,
+          isExisting: true,
+        }))
+      );
+
       setIsSaving(false);
       setHasExistingData(true);
       triggerColorfulConfetti();
 
-      // Compute updated cumulative stats for banner
+      // Compute TRUE updated cumulative stats directly from the fresh allAttendance array
+      const freshAllRecords = result.allRecords || getAttendanceRecords();
       const classStudents = students.filter(
         (s) => s.kelas === selectedClass && s.status === 'Aktif'
       );
       const classStudentIds = new Set(classStudents.map((s) => s.id));
-      const classRecords = attendanceRecords.filter((r) => classStudentIds.has(r.student_id));
-      // Add current date to set
-      const allDates = new Set(classRecords.map((r) => r.attendance_date));
-      allDates.add(selectedDate);
+      const classRecords = freshAllRecords.filter((r) => classStudentIds.has(r.student_id));
+      const allDates = new Set(
+        classRecords.map((r) => (r.attendance_date ? r.attendance_date.split('T')[0] : ''))
+      );
 
-      const totalHadirCount = classRecords.filter((r) => r.status === 'hadir').length + recordsToSave.filter((r) => r.status === 'hadir').length;
-      const totalAllEntries = (classRecords.length + recordsToSave.length) || 1;
+      const totalHadirCount = classRecords.filter((r) => r.status === 'hadir').length;
+      const totalAllEntries = classRecords.length || 1;
       const avgPercentage = Math.round((totalHadirCount / totalAllEntries) * 100);
 
       setSaveSuccessSummary({
@@ -259,7 +271,7 @@ export const DailyAttendanceView: React.FC<DailyAttendanceViewProps> = ({
       showToast(
         'success',
         isPastDate ? 'Presensi Tanggal Lampau Tersimpan' : 'Presensi Berhasil Disimpan',
-        `Data presensi Kelas ${selectedClass} (${result.created} baru, ${result.updated} diperbarui) berhasil disimpan dan langsung terakumulasi otomatis ke rekapitulasi semester.`
+        `Data presensi Kelas ${selectedClass} (${result.created} baru, ${result.updated} diperbarui) tanggal ${formatIndonesianDate(selectedDate, true)} berhasil disimpan dan langsung terakumulasi otomatis ke rekapitulasi semester.`
       );
 
       // Open automatic daily recap modal right after save

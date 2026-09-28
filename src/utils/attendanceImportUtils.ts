@@ -26,7 +26,7 @@ export interface AttendanceImportResult {
     izin: number;
     alfa: number;
   };
-  formatDetected: 'matrix' | 'list' | 'unknown';
+  formatDetected: 'matrix' | 'list' | 'summary' | 'unknown';
   errors: string[];
 }
 
@@ -258,6 +258,69 @@ export function downloadAttendanceListTemplate(targetClass: string = 'X-1'): voi
   XLSX.writeFile(wb, `Template_Impor_Log_Presensi_${targetClass.replace(/\s+/g, '_')}.xlsx`);
 }
 
+/**
+ * Downloads summary-format attendance Excel template (.xlsx)
+ * Columns: No, NISN, Nama Siswa, Kelas, L/P, Hadir, Sakit, Izin, Alfa
+ */
+export function downloadAttendanceSummaryTemplate(targetClass: string = 'X-1', month: number = new Date().getMonth() + 1, year: number = new Date().getFullYear()): void {
+  const monthNames = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  const monthName = monthNames[month - 1] || 'Bulan Berjalan';
+
+  const titleRows = [
+    [`FORMAT REKAPITULASI PRESENSI SISWA (RINGKASAN TOTAL REKAP)`],
+    [`SMAN 1 LEUWILIANG by Riska Puspita`],
+    [`Kelas: ${targetClass} | Periode: ${monthName} ${year}`],
+    [`Keterangan: Isikan jumlah total kehadiran siswa (Hadir, Sakit, Izin, Alfa)`],
+    [],
+  ];
+
+  const headers = ['No', 'NISN', 'Nama Siswa', 'Kelas', 'L/P', 'Hadir', 'Sakit', 'Izin', 'Alfa'];
+
+  const sampleData = [
+    [1, '0081234501', 'Aditia Pratama', targetClass, 'L', 20, 0, 0, 0],
+    [2, '0081234502', 'Aisyah Putri Azzahra', targetClass, 'P', 18, 2, 0, 0],
+    [3, '0081234503', 'Alif Kurniawan', targetClass, 'L', 17, 0, 3, 0],
+    [4, '0081234504', 'Anisa Rahmawati', targetClass, 'P', 15, 0, 0, 5],
+    [5, '0081234505', 'Bagas Sanjaya', targetClass, 'L', 10, 10, 0, 0],
+  ];
+
+  const fullSheet = [...titleRows, headers, ...sampleData];
+  const ws = XLSX.utils.aoa_to_sheet(fullSheet);
+
+  ws['!cols'] = [
+    { wch: 5 },
+    { wch: 15 },
+    { wch: 28 },
+    { wch: 10 },
+    { wch: 6 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 10 },
+  ];
+
+  const instructions = [
+    ['PANDUAN PENGISIAN TEMPLATE REKAP PRESENSI RINGKASAN TOTAL (.XLSX)'],
+    [],
+    ['1. Kolom "Nama Siswa" dan "Kelas" wajib diisi.'],
+    ['2. Kolom "NISN" opsional namun sangat disarankan untuk akurasi sinkronisasi.'],
+    ['3. Isikan angka jumlah total pada kolom Hadir, Sakit, Izin, dan Alfa.'],
+    ['4. Sistem akan otomatis mendistribusikan data presensi ke hari efektif pada bulan/tahun yang dipilih dan langsung terakumulasi ke rekapitulasi semester & peringatan BK.'],
+  ];
+  const wsGuide = XLSX.utils.aoa_to_sheet(instructions);
+  wsGuide['!cols'] = [{ wch: 80 }];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, `Rekap_${targetClass}`);
+  XLSX.utils.book_append_sheet(wb, wsGuide, 'Panduan');
+
+  const fileName = `Template_Impor_Rekap_Presensi_Ringkasan_${targetClass.replace(/\s+/g, '_')}_${monthName}_${year}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+}
+
 // ==========================================
 // 2. PARSE EXCEL / CSV ATTENDANCE FILE
 // ==========================================
@@ -358,6 +421,10 @@ export async function parseAttendanceFromExcel(
   let dateColIdx = -1;
   let statusColIdx = -1;
   let noteColIdx = -1;
+  let hadirColIdx = -1;
+  let sakitColIdx = -1;
+  let izinColIdx = -1;
+  let alfaColIdx = -1;
   const dateColumns: Array<{ colIdx: number; dateStr: string }> = [];
 
   for (let r = 0; r < Math.min(rawRows.length, 10); r++) {
@@ -378,6 +445,14 @@ export async function parseAttendanceFromExcel(
         classColIdx = cIdx;
       } else if (str.includes('tanggal') || str.includes('date') || str.includes('tgl')) {
         dateColIdx = cIdx;
+      } else if (str === 'hadir' || str === 'h' || str === 'jml hadir' || str === 'total hadir') {
+        hadirColIdx = cIdx;
+      } else if (str === 'sakit' || str === 's' || str === 'jml sakit' || str === 'total sakit') {
+        sakitColIdx = cIdx;
+      } else if (str === 'izin' || str === 'ijin' || str === 'i' || str === 'jml izin' || str === 'total izin') {
+        izinColIdx = cIdx;
+      } else if (str === 'alfa' || str === 'alpa' || str === 'a' || str === 'jml alfa' || str === 'total alfa' || str === 'tanpa keterangan') {
+        alfaColIdx = cIdx;
       } else if (str.includes('status') || str.includes('kehadiran') || str.includes('presensi') || str.includes('absen')) {
         statusColIdx = cIdx;
       } else if (str.includes('catatan') || str.includes('alasan') || str.includes('keterangan') || str.includes('note')) {
@@ -418,7 +493,29 @@ export async function parseAttendanceFromExcel(
   }
 
   // Determine format type
-  const formatDetected: 'matrix' | 'list' = isMatrixFormat || dateColumns.length > 0 ? 'matrix' : 'list';
+  let formatDetected: 'matrix' | 'list' | 'summary' = 'list';
+  if (isMatrixFormat || dateColumns.length > 0) {
+    formatDetected = 'matrix';
+  } else if ((hadirColIdx >= 0 || sakitColIdx >= 0 || izinColIdx >= 0 || alfaColIdx >= 0) && dateColIdx === -1) {
+    formatDetected = 'summary';
+  } else {
+    formatDetected = 'list';
+  }
+
+  // Prepare calendar dates for summary allocation (excluding Sundays)
+  const summaryDates: string[] = [];
+  if (formatDetected === 'summary') {
+    const daysInMonth = new Date(detectedYear, detectedMonth, 0).getDate();
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(detectedYear, detectedMonth - 1, d);
+      if (dt.getDay() !== 0) { // Exclude Sunday
+        const yyyy = detectedYear;
+        const mm = String(detectedMonth).padStart(2, '0');
+        const dd = String(d).padStart(2, '0');
+        summaryDates.push(`${yyyy}-${mm}-${dd}`);
+      }
+    }
+  }
 
   // Fast Student Lookup Map (by NISN, NIS, or normalized Name)
   const studentMap = new Map<string, Student>();
@@ -520,6 +617,75 @@ export async function parseAttendanceFromExcel(
           });
         }
       });
+    } else if (formatDetected === 'summary') {
+      // Summary format: Total counts per student (Hadir, Sakit, Izin, Alfa)
+      const hadirCount = hadirColIdx >= 0 ? Math.max(0, parseInt(String(row[hadirColIdx] || '0').replace(/[^\d]/g, ''), 10) || 0) : 0;
+      const sakitCount = sakitColIdx >= 0 ? Math.max(0, parseInt(String(row[sakitColIdx] || '0').replace(/[^\d]/g, ''), 10) || 0) : 0;
+      const izinCount = izinColIdx >= 0 ? Math.max(0, parseInt(String(row[izinColIdx] || '0').replace(/[^\d]/g, ''), 10) || 0) : 0;
+      const alfaCount = alfaColIdx >= 0 ? Math.max(0, parseInt(String(row[alfaColIdx] || '0').replace(/[^\d]/g, ''), 10) || 0) : 0;
+
+      // Distribute dates for each status
+      let dateCursor = 0;
+      const getDateForIndex = (idx: number) => {
+        if (summaryDates.length === 0) return getTodayString();
+        return summaryDates[idx % summaryDates.length];
+      };
+
+      // 1. Allocate Sakit
+      for (let s = 0; s < sakitCount; s++) {
+        parsedItems.push({
+          student_id: studentId,
+          student_nama: matchedStudent?.nama || rawName,
+          student_nisn: matchedStudent?.nisn || rawNisn,
+          student_kelas: matchedStudent?.kelas || rawClass,
+          isNewStudent,
+          date: getDateForIndex(dateCursor++),
+          status: 'sakit',
+          note: sakitCount >= 10 ? 'Peringatan Kesehatan (Surat Dokter / Rekap)' : 'Surat keterangan sakit',
+        });
+      }
+
+      // 2. Allocate Izin
+      for (let i = 0; i < izinCount; i++) {
+        parsedItems.push({
+          student_id: studentId,
+          student_nama: matchedStudent?.nama || rawName,
+          student_nisn: matchedStudent?.nisn || rawNisn,
+          student_kelas: matchedStudent?.kelas || rawClass,
+          isNewStudent,
+          date: getDateForIndex(dateCursor++),
+          status: 'izin',
+          note: 'Surat izin orang tua',
+        });
+      }
+
+      // 3. Allocate Alfa
+      for (let a = 0; a < alfaCount; a++) {
+        parsedItems.push({
+          student_id: studentId,
+          student_nama: matchedStudent?.nama || rawName,
+          student_nisn: matchedStudent?.nisn || rawNisn,
+          student_kelas: matchedStudent?.kelas || rawClass,
+          isNewStudent,
+          date: getDateForIndex(dateCursor++),
+          status: 'alfa',
+          note: 'Tanpa keterangan',
+        });
+      }
+
+      // 4. Allocate Hadir
+      for (let h = 0; h < hadirCount; h++) {
+        parsedItems.push({
+          student_id: studentId,
+          student_nama: matchedStudent?.nama || rawName,
+          student_nisn: matchedStudent?.nisn || rawNisn,
+          student_kelas: matchedStudent?.kelas || rawClass,
+          isNewStudent,
+          date: getDateForIndex(dateCursor++),
+          status: 'hadir',
+          note: '',
+        });
+      }
     } else {
       // List format
       const rawDateVal = dateColIdx >= 0 ? row[dateColIdx] : null;

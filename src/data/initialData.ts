@@ -18,6 +18,7 @@ export const defaultSettings: AppSettings = {
     yellow: 3,
     red: 5,
     priority: 10,
+    sickWarning: 10,
   },
   teacherProfile: {
     name: 'Riska Puspita, S.Pd., Kons.',

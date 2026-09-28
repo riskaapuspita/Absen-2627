@@ -19,6 +19,7 @@ import {
   parseAttendanceFromExcel,
   downloadAttendanceMatrixTemplate,
   downloadAttendanceListTemplate,
+  downloadAttendanceSummaryTemplate,
   AttendanceImportResult,
   ParsedAttendanceItem,
 } from '../../utils/attendanceImportUtils';
@@ -160,7 +161,7 @@ export const ImportAttendanceModal: React.FC<ImportAttendanceModalProps> = ({
             <div>
               <h2 className="font-extrabold text-base sm:text-lg">Impor Rekap Presensi dari Excel</h2>
               <p className="text-xs text-emerald-100/90">
-                Format Matrix Bulanan (1-31) & Log Harian (.xlsx, .xls, .csv)
+                Format Ringkasan Total (H/S/I/A), Matriks Bulanan (1-31) & Log Harian (.xlsx, .xls, .csv)
               </p>
             </div>
           </div>
@@ -301,7 +302,26 @@ export const ImportAttendanceModal: React.FC<ImportAttendanceModalProps> = ({
                   <span className="text-[11px] text-slate-500">Pilih format yang sesuai</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <button
+                    id="download-summary-template-btn"
+                    type="button"
+                    onClick={() => downloadAttendanceSummaryTemplate(selectedClass, selectedMonth, selectedYear)}
+                    className="p-3 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-xl text-left transition-all group flex items-start gap-2.5"
+                  >
+                    <div className="p-2 rounded-lg bg-emerald-100 text-emerald-800 group-hover:bg-emerald-600 group-hover:text-white transition-colors shrink-0">
+                      <Layers className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-xs text-slate-800 group-hover:text-emerald-900">
+                        Template Rekap Ringkasan (.xlsx)
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        Kolom Hadir, Sakit, Izin, & Alfa per siswa
+                      </p>
+                    </div>
+                  </button>
+
                   <button
                     id="download-matrix-template-btn"
                     type="button"
@@ -382,7 +402,11 @@ export const ImportAttendanceModal: React.FC<ImportAttendanceModalProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="font-bold">Format Terdeteksi:</span>
                   <span className="px-2 py-0.5 rounded-md bg-white font-semibold text-emerald-800 border border-slate-200">
-                    {parseResult.formatDetected === 'matrix' ? 'Matriks Bulanan (Tanggal)' : 'Log Baris Harian'}
+                    {parseResult.formatDetected === 'matrix'
+                      ? 'Matriks Bulanan (Tanggal 1-31)'
+                      : parseResult.formatDetected === 'summary'
+                      ? 'Ringkasan Rekap Siswa (H/S/I/A)'
+                      : 'Log Baris Harian'}
                   </span>
                 </div>
 

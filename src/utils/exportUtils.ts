@@ -49,6 +49,14 @@ export function exportRecapToExcel(
     else if (r.warningLevel === 'merah') warningText = 'Peringatan Merah (SP II / Panggilan Ortu)';
     else if (r.warningLevel === 'kuning') warningText = 'Peringatan Kuning (SP I / Pembinaan)';
 
+    if (r.isSickWarning) {
+      if (warningText === 'Aman / Normal') {
+        warningText = `PERINGATAN SAKIT (${r.sakit}x Sakit)`;
+      } else {
+        warningText += ` | PERINGATAN SAKIT (${r.sakit}x)`;
+      }
+    }
+
     sheetData.push([
       idx + 1,
       r.student.nisn || '',
@@ -878,6 +886,14 @@ export function exportRecapToCSV(
     if (r.warningLevel === 'prioritas') warningText = 'Prioritas Tindak Lanjut BK';
     else if (r.warningLevel === 'merah') warningText = 'Peringatan Merah (SP II / Ortu)';
     else if (r.warningLevel === 'kuning') warningText = 'Peringatan Kuning (SP I)';
+
+    if (r.isSickWarning) {
+      if (warningText === 'Normal') {
+        warningText = `Peringatan Sakit (${r.sakit}x)`;
+      } else {
+        warningText += ` | Peringatan Sakit (${r.sakit}x)`;
+      }
+    }
 
     return [
       idx + 1,
